@@ -6,4 +6,5 @@ const items=run.items.map(item=>{
  if(!['Read','Ignore','Investigate'].includes(decision)) throw new Error(`Missing explicit decision for ${item.id}. Nothing published.`);
  return {...item,decision};
 });
-return [{json:{...run,items,reviewer:form.Reviewer.trim(),reviewNotes:form['Review notes']||'',reviewedAt:new Date().toISOString()}}];
+if(items.some(item=>item.decision==='Read')&&form['Source verification']!=='Confirmed') throw new Error('Confirm independent source verification for all Read items, or mark them Investigate.');
+return [{json:{...run,items,sourceVerification:form['Source verification']||'Needs investigation',reviewer:form.Reviewer.trim(),reviewNotes:form['Review notes']||'',reviewedAt:new Date().toISOString()}}];

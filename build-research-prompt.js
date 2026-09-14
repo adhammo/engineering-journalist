@@ -13,7 +13,6 @@ if(typeof config.topic!=='string' || !config.topic.trim()) throw new Error('Conf
 for(const key of ['keywords','exclusions','audience','sources']) if(!Array.isArray(config[key])) throw new Error(`Config ${key} must be an array.`);
 for(const key of ['lookback_days','upcoming_days','max_items']) if(!Number.isInteger(config[key]) || config[key]<1) throw new Error(`Invalid ${key}.`);
 if(config.max_items>8 || config.lookback_days>90 || config.upcoming_days>366) throw new Error('Demo limits: max_items <=8, lookback_days <=90, upcoming_days <=366.');
-if(!/^[a-zA-Z0-9._-]+$/.test(config.gemini_model)) throw new Error('Configure a Google Search-capable Gemini model available to your key.');
 const types=['paper','conference','standard','webinar'];
 for(const s of config.sources) {
   if(typeof s.name!=='string' || !/^https:\/\/[^/]+/.test(s.url) || !Array.isArray(s.types) || !s.types.length || s.types.some(t=>!types.includes(t))) throw new Error('Each source needs name, HTTPS URL and valid types.');
@@ -26,5 +25,4 @@ const replacements={CONFIG_JSON:JSON.stringify(config),MAX_ITEMS:String(config.m
 for(const key of Object.keys(replacements)) if(!template.includes('{{'+key+'}}')) throw new Error(`Prompt template missing ${key}.`);
 // Single pass: never treat placeholder-like text inside config values as instructions to substitute.
 const prompt=template.replace(/\{\{(CONFIG_JSON|MAX_ITEMS|TODAY|START_DATE|UPCOMING_UNTIL)\}\}/g,(_,k)=>replacements[k]);
-return [{json:{...setup,sourceRevision,config,today,start,until,prompt,dashboardTemplate,
-  body:{contents:[{role:'user',parts:[{text:prompt}]}],tools:[{google_search:{}}],generationConfig:{temperature:0.1,maxOutputTokens:16000}}}}];
+return [{json:{...setup,sourceRevision,config,today,start,until,prompt,dashboardTemplate}}];

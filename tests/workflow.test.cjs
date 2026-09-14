@@ -45,7 +45,7 @@ test('Both review descriptions evaluate without embedded-string syntax errors',(
  }
 });
 test('All connections and cross-node references exist',()=>{
- for(const [from,c]of Object.entries(w.connections)){assert(nodes[from]);for(const port of c.main)for(const target of port)assert(nodes[target.node]);}
+ for(const [from,c]of Object.entries(w.connections)){assert(nodes[from]);for(const port of Object.values(c).flat())for(const target of port)assert(nodes[target.node]);}
  for(const n of w.nodes)for(const match of JSON.stringify(n.parameters).matchAll(/\$\('([^']+)'\)/g))assert(nodes[match[1]],match[1]);
 });
 test('Target repository configured, no embedded credentials',()=>{assert.equal(context['Repository Settings'].owner,'adhammo');assert.equal(context['Repository Settings'].repo,'engineering-journalist');assert(w.nodes.every(n=>!n.credentials));});
@@ -72,10 +72,6 @@ test('Search suggestion HTML alone does not prove search or sources',()=>{const 
 test('Usable source chunks without query list pass with warning',()=>{const r=response();delete r.body.candidates[0].groundingMetadata.webSearchQueries;const parsed=validate(r);assert.equal(parsed.items.length,1);assert(parsed.validationWarnings.some(x=>x.includes('search-query details are absent')));});
 test('Empty chunk objects are not usable source evidence',()=>{const r=response();r.body.candidates[0].groundingMetadata.groundingChunks=[{}];assert.throws(()=>validate(r),/no usable grounding source chunks/);});
 test('Unwrapped Gemini response is accepted',()=>assert.equal(validate(response().body).items.length,1));
-test('Text-only n8n output reports missing metadata, not an incomplete answer',()=>{
- const r={text:response().body.candidates[0].content.parts[0].text};
- assert.throws(()=>validate(r),/Text-only n8n output: research JSON parsed \(1 items\), but search grounding metadata was not forwarded/);
-});
 test('Text envelope can preserve original grounding metadata',()=>{
  const c=response().body.candidates[0];
  const parsed=validate({text:c.content.parts[0].text,groundingMetadata:c.groundingMetadata});
@@ -88,28 +84,6 @@ test('Text envelope cannot override an explicit incomplete finish reason',()=>{
 test('Unsupported envelope reports input-format mismatch',()=>assert.throws(()=>validate({output:'different shape'}),/Unsupported research input format/));
 test('Malformed JSON fails closed',()=>{const r=response();r.body.candidates[0].content.parts[0].text='{bad';assert.throws(()=>validate(r));});
 test('Truncated response fails closed',()=>{const r=response();r.body.candidates[0].finishReason='MAX_TOKENS';assert.throws(()=>validate(r));});
-test('Attached STOP response without parts gets an empty-answer diagnostic',()=>{
- const r={body:{candidates:[{content:{role:'model'},finishReason:'STOP',groundingMetadata:{webSearchQueries:Array(18).fill('TEST query')}}],usageMetadata:{candidatesTokenCount:1129},responseId:'TEST-empty-STOP'}};
- assert.equal(execute('Check Research Response',r).retryEmptyAnswer,true);
- assert.throws(()=>validate(r),/empty answer.*TEST-empty-STOP/);
-});
-test('Whitespace-only and thought-only responses trigger one retry',()=>{
- for(const parts of [[],[{text:'   '}],[{thought:true,text:'Internal reasoning only'}]]){
-  const r=response();r.body.candidates[0].content.parts=parts;
-  assert.equal(execute('Check Research Response',r).retryEmptyAnswer,true);assert.throws(()=>validate(r),/empty answer/);
- }
-});
-test('Valid empty-result JSON does not retry',()=>assert.equal(execute('Check Research Response',response([])).retryEmptyAnswer,false));
-test('Malformed nonempty text and truncated responses do not retry',()=>{
- const r=response();r.body.candidates[0].content.parts=[{text:'{bad'}];assert.equal(execute('Check Research Response',r).retryEmptyAnswer,false);
- r.body.candidates[0].finishReason='MAX_TOKENS';r.body.candidates[0].content.parts=[];assert.equal(execute('Check Research Response',r).retryEmptyAnswer,false);
-});
-test('Retry uses original request and cannot loop',()=>{
- assert(nodes['Retry Empty Gemini Response'].parameters.jsonBody.includes("$('Build Research Prompt').first().json.body"));
- assert.equal(w.connections['Retry Empty Answer?'].main[0][0].node,'Retry Empty Gemini Response');
- assert.equal(w.connections['Retry Empty Answer?'].main[1][0].node,'Parse Research JSON');
- assert.deepEqual(w.connections['Retry Empty Gemini Response'].main[0].map(x=>x.node),['Parse Research JSON']);
-});
 test('Future publication date rejected',()=>assert.throws(()=>validate(response([{...item,date:'2099-01-01'}]))));
 test('Impossible date rejected',()=>assert.throws(()=>validate(response([{...item,date:'2026-02-30'}]))));
 test('Unknown author is explicit',()=>assert(validate(response([{...item,author:null}])).items[0].flags.includes('Author unknown')));
@@ -158,15 +132,15 @@ test('Private resume URL never appears in report',()=>assert(!draft.reviewHtml.i
 test('Source revision and workflow build retained',()=>{assert.equal(draft.sourceRevision,'a'.repeat(40));assert(/^[a-f0-9]{64}$/.test(draft.workflowBuild));});
 test('Review form requires populated slots only',()=>{
  const fields=nodes['Human Evidence Review'].parameters.formFields.values;
- assert.equal(fields.length,10);
- for(const [i,f]of fields.slice(1,-1).entries()){
+ assert.equal(fields.length,11);
+ for(const [i,f]of fields.slice(1,9).entries()){
   assert(!f.defaultValue);
   const required=new Function('$','return ('+f.requiredField.slice(3,-3)+')')(n=>({first:()=>({json:draft})}));
   assert.equal(required,i<3);
  }
 });
 test('Missing human decision prevents output',()=>assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read'})));
-const decisions=execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read',E02:'Ignore',E03:'Investigate','Review notes':'TEST FIXTURE'});
+const decisions=execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read',E02:'Ignore',E03:'Investigate','Source verification':'Confirmed','Review notes':'TEST FIXTURE'});
 const reviewed=execute('Render Reviewed Dashboard',decisions);
 context['Render Reviewed Dashboard']=reviewed;
 test('Three-way decisions create one reading item',()=>{assert(reviewed.finalHtml.includes('Weekly reading list (1)'));assert(reviewed.finalHtml.includes('Investigate (1)'));assert(reviewed.finalHtml.includes('Ignored (1)'));});
@@ -190,3 +164,23 @@ test('Review-pointer update uses SHA',()=>assert.equal(execute('Prepare Review C
 const tmp=path.join(root,'tmp');fs.mkdirSync(tmp,{recursive:true});
 fs.writeFileSync(path.join(tmp,'dashboard-test.html'),reviewed.finalHtml);
 console.log(`${count} offline tests passed. No external API execution.`);
+
+test('Research chain uses hardcoded Gemini 3.5 Flash',()=>{
+ assert.equal(nodes['Research'].type,'@n8n/n8n-nodes-langchain.chainLlm');
+ assert.equal(nodes['Google Gemini Chat Model'].parameters.modelName,'models/gemini-3.5-flash');
+ assert.equal(w.connections['Google Gemini Chat Model'].ai_languageModel[0][0].node,'Research');
+ assert(!nodes['Gemini Research']);assert(!nodes['Retry Empty Gemini Response']);
+ assert(!Object.hasOwn(config,'gemini_model'));
+});
+test('Text-only candidates remain explicitly unverified',()=>{
+ const r=validate({text:response().body.candidates[0].content.parts[0].text});
+ assert.equal(r.items.length,1);assert.equal(r.researchStatus,'unverified_model_output');
+ assert(r.coverage.every(x=>x.status==='not_verified'));
+ assert(r.validationWarnings.some(x=>x.includes('unverified leads')));
+});
+test('Text-only zero results proceed without claiming search',()=>{
+ const r=validate({text:response([]).body.candidates[0].content.parts[0].text});
+ assert.equal(r.items.length,0);assert.equal(r.researchStatus,'unverified_model_output');
+});
+test('Read requires confirmation of source checks',()=>assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read',E02:'Ignore',E03:'Investigate'}),/independent source verification/));
+console.log('All '+count+' checks passed.');

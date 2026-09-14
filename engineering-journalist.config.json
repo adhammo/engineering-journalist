@@ -21,7 +21,6 @@
   "lookback_days": 7,
   "upcoming_days": 90,
   "max_items": 8,
-  "gemini_model": "gemini-2.5-flash",
   "sources": [
     {
       "name": "IEEE Xplore",
