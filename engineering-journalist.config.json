@@ -23,7 +23,8 @@
       "name": "IEEE Xplore",
       "url": "https://ieeexplore.ieee.org/",
       "types": [
-        "paper"
+        "paper",
+        "conference"
       ],
       "note": "Publisher metadata or accessible abstract; never imply full-text access."
     },
