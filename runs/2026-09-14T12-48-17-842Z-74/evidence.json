@@ -1,0 +1,168 @@
+{
+  "owner": "adhammo",
+  "repo": "engineering-journalist",
+  "branch": "main",
+  "api": "https://api.github.com/repos/adhammo/engineering-journalist/contents/",
+  "prefix": "runs",
+  "sourceRevision": "6f2ada8e5f6b5f865a18a2fc7f3bea51c7e4fb7c",
+  "workflowBuild": "cfce85474c7b763173303f83f8ca25fd187f826e5c318b1af1cbb906ff174a1f",
+  "runId": "2026-09-14T12-48-17-842Z-74",
+  "config": {
+    "topic": "Chiplet interconnects and heterogeneous integration",
+    "keywords": [
+      "chiplet",
+      "die-to-die",
+      "UCIe",
+      "heterogeneous integration"
+    ],
+    "exclusions": [
+      "stock prices",
+      "job advertisements",
+      "unsubstantiated product rumors"
+    ],
+    "audience": [
+      "digital",
+      "analog",
+      "RF",
+      "system",
+      "verification"
+    ],
+    "lookback_days": 7,
+    "upcoming_days": 90,
+    "max_items": 8,
+    "sources": [
+      {
+        "name": "IEEE Xplore",
+        "url": "https://ieeexplore.ieee.org/",
+        "types": [
+          "paper"
+        ],
+        "note": "Publisher metadata or accessible abstract; never imply full-text access."
+      },
+      {
+        "name": "arXiv",
+        "url": "https://arxiv.org/",
+        "types": [
+          "paper"
+        ],
+        "note": "Label preprints; arXiv hosting is not peer review."
+      },
+      {
+        "name": "ACM Digital Library",
+        "url": "https://dl.acm.org/",
+        "types": [
+          "paper"
+        ]
+      },
+      {
+        "name": "ISSCC",
+        "url": "https://www.isscc.org/",
+        "types": [
+          "conference"
+        ]
+      },
+      {
+        "name": "Design Automation Conference",
+        "url": "https://www.dac.com/",
+        "types": [
+          "conference"
+        ]
+      },
+      {
+        "name": "IEEE International Microwave Symposium",
+        "url": "https://ims-ieee.org/",
+        "types": [
+          "conference"
+        ]
+      },
+      {
+        "name": "Symposia on VLSI Technology and Circuits",
+        "url": "https://www.vlsisymposium.org/",
+        "types": [
+          "conference"
+        ]
+      },
+      {
+        "name": "UCIe Consortium",
+        "url": "https://www.uciexpress.org/",
+        "types": [
+          "standard",
+          "webinar"
+        ]
+      },
+      {
+        "name": "IEEE Solid-State Circuits Society",
+        "url": "https://sscs.ieee.org/",
+        "types": [
+          "webinar"
+        ]
+      }
+    ]
+  },
+  "today": "2026-09-14",
+  "start": "2026-09-07",
+  "until": "2026-12-13",
+  "items": [],
+  "coverage": [
+    {
+      "source": "IEEE Xplore",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "arXiv",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "ACM Digital Library",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "ISSCC",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "Design Automation Conference",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "IEEE International Microwave Symposium",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "Symposia on VLSI Technology and Circuits",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "UCIe Consortium",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    },
+    {
+      "source": "IEEE Solid-State Circuits Society",
+      "status": "not_verified",
+      "note": "No search tools or external databases are available in this execution environment to query real-time data for the requested 2026 period."
+    }
+  ],
+  "rejected": [],
+  "grounding": {},
+  "researchStatus": "unverified_model_output",
+  "validationWarnings": [
+    "Research returned text without provider source metadata. Web search and factual accuracy are not established. Treat entries as unverified leads; independently open and verify original sources before selecting Read. Empty results do not establish that no updates exist.",
+    "Text envelope omitted finishReason. JSON structure was validated, but upstream completion status was not supplied."
+  ],
+  "createdAt": "2026-09-14T12:48:33.486Z",
+  "reviewPath": "runs/2026-09-14T12-48-17-842Z-74/evidence.html",
+  "reviewGithubUrl": "https://github.com/adhammo/engineering-journalist/blob/main/runs/2026-09-14T12-48-17-842Z-74/evidence.html",
+  "reviewPagesUrl": "https://adhammo.github.io/engineering-journalist/runs/2026-09-14T12-48-17-842Z-74/evidence.html",
+  "sourceVerification": "Confirmed",
+  "reviewer": "Adham",
+  "reviewNotes": "",
+  "reviewedAt": "2026-09-14T12:50:11.146Z"
+}
