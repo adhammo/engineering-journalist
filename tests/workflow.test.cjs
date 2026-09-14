@@ -27,6 +27,23 @@ function response(items=[item]){return {body:{candidates:[{finishReason:'STOP',c
 const validate=r=>execute('Parse Research JSON',r);
 test('Export matches source-controlled code',()=>execFileSync(process.execPath,[path.join(root,'scripts/build-workflow.cjs'),'--check'],{stdio:'pipe'}));
 test('All Code nodes compile',()=>{for(const n of w.nodes)if(n.type.endsWith('.code'))new Function(n.parameters.jsCode);});
+test('Every workflow parameter expression compiles',()=>{
+ function check(value,location){
+  if(typeof value==='string'&&value.startsWith('={{')) {
+   assert(value.endsWith('}}'),location);
+   assert.doesNotThrow(()=>new Function('$','$json','return ('+value.slice(3,-2)+')'),location);
+  } else if(value&&typeof value==='object')for(const [key,child]of Object.entries(value))check(child,location+'.'+key);
+ }
+ for(const n of w.nodes)check(n.parameters,n.name);
+});
+test('Both review descriptions evaluate without embedded-string syntax errors',()=>{
+ const lookup=()=>({first:()=>({json:{reviewPagesUrl:'https://example.org/evidence.html',reviewGithubUrl:'https://github.com/example/repo/blob/main/evidence.html',items:[],draftPagesUrl:'https://example.org/draft.html',owner:'example',repo:'repo',draftPath:'runs/test/review.html',body:{commit:{sha:'a'.repeat(40)}}}})});
+ for(const name of ['Human Evidence Review','Human Publication Approval']) {
+  const expression=nodes[name].parameters.formDescription;
+  const description=new Function('$','return ('+expression.slice(3,-2)+')')(lookup);
+  assert(description.includes('<br>'));assert(description.includes('https://'));
+ }
+});
 test('All connections and cross-node references exist',()=>{
  for(const [from,c]of Object.entries(w.connections)){assert(nodes[from]);for(const port of c.main)for(const target of port)assert(nodes[target.node]);}
  for(const n of w.nodes)for(const match of JSON.stringify(n.parameters).matchAll(/\$\('([^']+)'\)/g))assert(nodes[match[1]],match[1]);
@@ -43,8 +60,56 @@ test('More than eight candidates is rejected in config',()=>assert.throws(()=>ex
 test('Prompt placeholders do not recursively alter config values',()=>{const r=execute('Build Research Prompt',{}, {'Fetch Config':fileResponse(JSON.stringify({...config,topic:'{{TODAY}} literal'}))});assert(r.prompt.includes('{{TODAY}} literal'));});
 test('Valid grounded evidence passes',()=>assert.equal(validate(response()).items.length,1));
 test('Missing grounding fails closed',()=>{const r=response();delete r.body.candidates[0].groundingMetadata;assert.throws(()=>validate(r));});
+test('Reported empty search response passes with incomplete-coverage warning',()=>{
+ const r=response([]);r.body.candidates[0].groundingMetadata={webSearchQueries:Array.from({length:12},(_,i)=>'TEST query '+i),searchEntryPoint:{renderedContent:'<div>Search suggestions</div>'}};
+ const parsed=validate(r);assert.equal(parsed.items.length,0);assert.equal(parsed.researchStatus,'searched_no_usable_sources');
+ assert(parsed.validationWarnings.some(x=>x.includes('12 queries')&&x.includes('does not establish')));
+ assert(execute('Render Draft Dashboard',parsed).reviewHtml.includes('Research coverage is incomplete'));
+});
+test('Search without source chunks cannot pass nonempty candidates',()=>{const r=response();delete r.body.candidates[0].groundingMetadata.groundingChunks;assert.throws(()=>validate(r),/candidate.*no usable grounding source chunks/);});
+test('Empty answer without search evidence is still blocked',()=>{const r=response([]);delete r.body.candidates[0].groundingMetadata;assert.throws(()=>validate(r),/No search activity/);});
+test('Search suggestion HTML alone does not prove search or sources',()=>{const r=response([]);r.body.candidates[0].groundingMetadata={searchEntryPoint:{renderedContent:'<div>suggestions</div>'}};assert.throws(()=>validate(r),/No search activity/);});
+test('Usable source chunks without query list pass with warning',()=>{const r=response();delete r.body.candidates[0].groundingMetadata.webSearchQueries;const parsed=validate(r);assert.equal(parsed.items.length,1);assert(parsed.validationWarnings.some(x=>x.includes('search-query details are absent')));});
+test('Empty chunk objects are not usable source evidence',()=>{const r=response();r.body.candidates[0].groundingMetadata.groundingChunks=[{}];assert.throws(()=>validate(r),/no usable grounding source chunks/);});
+test('Unwrapped Gemini response is accepted',()=>assert.equal(validate(response().body).items.length,1));
+test('Text-only n8n output reports missing metadata, not an incomplete answer',()=>{
+ const r={text:response().body.candidates[0].content.parts[0].text};
+ assert.throws(()=>validate(r),/Text-only n8n output: research JSON parsed \(1 items\), but search grounding metadata was not forwarded/);
+});
+test('Text envelope can preserve original grounding metadata',()=>{
+ const c=response().body.candidates[0];
+ const parsed=validate({text:c.content.parts[0].text,groundingMetadata:c.groundingMetadata});
+ assert.equal(parsed.items.length,1);assert(parsed.validationWarnings.some(x=>x.includes('omitted finishReason')));
+});
+test('Text envelope cannot override an explicit incomplete finish reason',()=>{
+ const c=response().body.candidates[0];
+ assert.throws(()=>validate({text:c.content.parts[0].text,groundingMetadata:c.groundingMetadata,finishReason:'MAX_TOKENS'}),/finishReason=MAX_TOKENS/);
+});
+test('Unsupported envelope reports input-format mismatch',()=>assert.throws(()=>validate({output:'different shape'}),/Unsupported research input format/));
 test('Malformed JSON fails closed',()=>{const r=response();r.body.candidates[0].content.parts[0].text='{bad';assert.throws(()=>validate(r));});
 test('Truncated response fails closed',()=>{const r=response();r.body.candidates[0].finishReason='MAX_TOKENS';assert.throws(()=>validate(r));});
+test('Attached STOP response without parts gets an empty-answer diagnostic',()=>{
+ const r={body:{candidates:[{content:{role:'model'},finishReason:'STOP',groundingMetadata:{webSearchQueries:Array(18).fill('TEST query')}}],usageMetadata:{candidatesTokenCount:1129},responseId:'TEST-empty-STOP'}};
+ assert.equal(execute('Check Research Response',r).retryEmptyAnswer,true);
+ assert.throws(()=>validate(r),/empty answer.*TEST-empty-STOP/);
+});
+test('Whitespace-only and thought-only responses trigger one retry',()=>{
+ for(const parts of [[],[{text:'   '}],[{thought:true,text:'Internal reasoning only'}]]){
+  const r=response();r.body.candidates[0].content.parts=parts;
+  assert.equal(execute('Check Research Response',r).retryEmptyAnswer,true);assert.throws(()=>validate(r),/empty answer/);
+ }
+});
+test('Valid empty-result JSON does not retry',()=>assert.equal(execute('Check Research Response',response([])).retryEmptyAnswer,false));
+test('Malformed nonempty text and truncated responses do not retry',()=>{
+ const r=response();r.body.candidates[0].content.parts=[{text:'{bad'}];assert.equal(execute('Check Research Response',r).retryEmptyAnswer,false);
+ r.body.candidates[0].finishReason='MAX_TOKENS';r.body.candidates[0].content.parts=[];assert.equal(execute('Check Research Response',r).retryEmptyAnswer,false);
+});
+test('Retry uses original request and cannot loop',()=>{
+ assert(nodes['Retry Empty Gemini Response'].parameters.jsonBody.includes("$('Build Research Prompt').first().json.body"));
+ assert.equal(w.connections['Retry Empty Answer?'].main[0][0].node,'Retry Empty Gemini Response');
+ assert.equal(w.connections['Retry Empty Answer?'].main[1][0].node,'Parse Research JSON');
+ assert.deepEqual(w.connections['Retry Empty Gemini Response'].main[0].map(x=>x.node),['Parse Research JSON']);
+});
 test('Future publication date rejected',()=>assert.throws(()=>validate(response([{...item,date:'2099-01-01'}]))));
 test('Impossible date rejected',()=>assert.throws(()=>validate(response([{...item,date:'2026-02-30'}]))));
 test('Unknown author is explicit',()=>assert(validate(response([{...item,author:null}])).items[0].flags.includes('Author unknown')));

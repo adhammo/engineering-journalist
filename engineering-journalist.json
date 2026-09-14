@@ -49,7 +49,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Repository coordinates only. Research scope lives in engineering-journalist.config.json.\nconst owner = 'adhammo';\nconst repo = 'engineering-journalist';\nconst branch = 'main';\nconst base = `https://api.github.com/repos/${owner}/${repo}`;\nreturn [{json:{owner,repo,branch,base,api:base+'/contents/',prefix:'runs',\n  workflowBuild:'139f2891f85306731ea5fc905e57553f47a38f7490e0175f82a847902d5166eb',\n  runId:new Date().toISOString().replace(/[:.]/g,'-')+'-'+$execution.id}}];\n"
+        "jsCode": "// Repository coordinates only. Research scope lives in engineering-journalist.config.json.\nconst owner = 'adhammo';\nconst repo = 'engineering-journalist';\nconst branch = 'main';\nconst base = `https://api.github.com/repos/${owner}/${repo}`;\nreturn [{json:{owner,repo,branch,base,api:base+'/contents/',prefix:'runs',\n  workflowBuild:'00eeb3b3835ced72a69d6bbc1a5fce47242acae25a65dd88d91905f9776a1b4a',\n  runId:new Date().toISOString().replace(/[:.]/g,'-')+'-'+$execution.id}}];\n"
       },
       "notes": "Source: repository-settings.js. Edit the file, run npm run build, then reimport the JSON.",
       "notesInFlow": false
@@ -213,6 +213,83 @@
       "notesInFlow": false
     },
     {
+      "id": "fe40240e-8e1a-c63d-e93b-e811c6d3cf89",
+      "name": "Check Research Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -200
+      ],
+      "parameters": {
+        "jsCode": "// HTTP 200 / STOP can still contain no answer. Retry this case once, not indefinitely.\nconst response=$json.body??$json;\nconst candidate=response.candidates?.[0];\nconst parts=Array.isArray(candidate?.content?.parts)?candidate.content.parts:[];\nconst text=parts.filter(p=>p&&!p.thought&&typeof p.text==='string').map(p=>p.text).join('');\nconst retryEmptyAnswer=candidate?.finishReason==='STOP'&&!text.trim();\nreturn [{json:{...$json,retryEmptyAnswer}}];\n"
+      },
+      "notes": "Source: check-research-response.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "835513b6-8048-49ad-e60b-991077fa96af",
+      "name": "Retry Empty Answer?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        -200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.retryEmptyAnswer }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "46c58430-68f3-ca5e-7915-6dd590c3997d",
+      "name": "Retry Empty Gemini Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        -200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + $('Build Research Prompt').first().json.config.gemini_model + ':generateContent' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Build Research Prompt').first().json.body }}"
+      },
+      "notes": "Select your existing googlePalmApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
       "id": "e7f7254d-d953-6bd4-810c-ec84b11c1575",
       "name": "Parse Research JSON",
       "type": "n8n-nodes-base.code",
@@ -222,7 +299,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const run=$('Build Research Prompt').first().json;\nconst response=$json.body;\r\nconst c=response.candidates?.[0];\r\nif (!c || c.finishReason!=='STOP') throw new Error('Gemini returned no complete answer. Inspect block/finish reason; retry or raise output limit.');\r\nconst text=(c.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');\r\nconst grounding=c.groundingMetadata;\r\nif (!grounding?.webSearchQueries?.length || !grounding?.groundingChunks?.length) throw new Error('No search grounding evidence returned. Do not publish a memory-only answer. Try a supported Gemini model.');\r\nlet data;\r\ntry {data=JSON.parse(text.trim().replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/,''));} catch {throw new Error('Malformed research JSON: fail closed. Inspect Gemini response.');}\r\nif (!Array.isArray(data.items) || !Array.isArray(data.coverage) || data.items.length>run.config.max_items) throw new Error('Invalid evidence schema / item limit.');\r\nconst host=u=>{const m=/^https:\\/\\/([^/:?#]+)(?::443)?(?:[/?#]|$)/i.exec(u||''); if(!m) throw new Error('HTTPS source link required');return m[1].toLowerCase().replace(/^www\\./,'');};\r\nconst allowed=run.config.sources.map(s=>host(s.url));\r\nconst validDate=v=>v===null || (typeof v==='string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v) && !isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0,10)===v);\r\nconst seen=new Set(), rejected=[];\nconst validationWarnings=[];\nfor(const [index,support] of (grounding.groundingSupports||[]).entries()) {\n if(!Array.isArray(support.groundingChunkIndices) || support.groundingChunkIndices.some(i=>!Number.isInteger(i)||i<0||i>=grounding.groundingChunks.length)) {\n  validationWarnings.push(`Grounding support ${index+1} references a missing source chunk. Grounding metadata is inconsistent; it does not establish item-level support.`);\n }\n}\nconst enums={type:['paper','standard','conference','webinar'],date_type:['published','updated','unknown'],access:['full_text','abstract_only','metadata_only'],publication_status:['preprint','published','draft','approved','announcement','unknown']};\nconst items=[];\nfor (const [i, original] of data.items.entries()) {\n const item={...original};\n const reasons=[],normalizations=[];\n for (const key of ['title','source','link','summary','relevance','type','access','publication_status','date_type']) if(typeof item[key]!=='string' || !item[key].trim()) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['author','evidence','evidence_location']) if(item[key]!==null && typeof item[key]!=='string') throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['date','event_date','deadline']) if(!validDate(item[key])) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for(const [field,values] of Object.entries(enums)) if(!values.includes(item[field])) reasons.push(`Invalid ${field}: ${JSON.stringify(item[field])}. Allowed: ${values.join(', ')}.`);\n if(item.date && item.date>run.today) throw new Error('Future publication date: distinguish event date.');\r\n if((item.date===null)!==(item.date_type==='unknown')) throw new Error('Date/date_type mismatch.');\r\n // Unwrap only an unambiguous Markdown link whose label and target are identical.\n const markdown=/^\\[(https:\\/\\/[^\\s]+)\\]\\((https:\\/\\/[^\\s]+)\\)$/.exec(item.link.trim());\n if(markdown && markdown[1]===markdown[2]) {item.link=markdown[2];normalizations.push('Identical Markdown URL wrapper removed');}\n let h;\n try {\n  if(/[\\s<>\\\\]/.test(item.link)) throw new Error('Invalid URL characters');\n  h=host(item.link);\n } catch {reasons.push('Invalid link: provide one plain HTTPS source URL, without Markdown or placeholders.');}\n if(h) {\n  if(!allowed.some(a=>h===a || h.endsWith('.'+a))) reasons.push('Outside configured source domains');\n  else if(!run.config.sources.some(s=>{const a=host(s.url);return (h===a || h.endsWith('.'+a)) && s.types.includes(item.type);})) reasons.push('Item type excluded by source configuration');\n  if(h==='arxiv.org' || h.endsWith('.arxiv.org')) {\n   const arxivPath=item.link.replace(/^https:\\/\\/[^/]+/,'').split(/[?#]/)[0];\n   if(!/^\\/(?:abs|pdf)\\/(?:\\d{2}(?:0[1-9]|1[0-2])\\.\\d{4,5}|[a-z-]+(?:\\.[A-Z]{2})?\\/\\d{7})(?:v[1-9]\\d*)?(?:\\.pdf)?$/.test(arxivPath)) reasons.push('Invalid arXiv paper identifier: placeholder or non-paper URL; a real abs/pdf identifier is required.');\n  }\n }\n if(reasons.length) {rejected.push({input_index:i+1,title:item.title,reason:reasons.join(' '),original});continue;}\n const recent=item.date && item.date>=run.start && item.date<=run.today;\r\n const upcoming=['conference','webinar'].includes(item.type) && item.event_date && item.event_date>=run.today && item.event_date<=run.until;\r\n if(!recent && !upcoming) {rejected.push({title:item.title,reason:'Outside window or date unknown'});continue;}\r\n const key=item.link.replace(/#.*$/,'').replace(/\\?.*$/,'').replace(/\\/$/,'');\r\n if(seen.has(key)) {rejected.push({title:item.title,reason:'Duplicate source URL in this run'});continue;}\r\n seen.add(key);\r\n items.push({...item,id:'E'+String(items.length+1).padStart(2,'0'),verification:'Human verification required',flags:[...normalizations,...(!item.author?['Author unknown']:[]),...(!item.evidence?['No supporting excerpt']:[]),...(item.access!=='full_text'?['Full text not checked']:[]),...(validationWarnings.length?['Inconsistent grounding metadata; verify original source independently']:[])]});\n}\r\nconst coverage=run.config.sources.map(s=>{\r\n const row=data.coverage.find(c=>c.source===s.name);\r\n return {source:s.name,status:['searched','inaccessible','not_searched'].includes(row?.status)?row.status:'not_searched',note:typeof row?.note==='string'?row.note:'No source coverage report returned'};\r\n});\r\nif(data.items.length && !items.length) validationWarnings.push('All returned candidates were excluded. This is not evidence that no relevant updates exist. Review the rejection reasons and rerun research.');\nreturn [{json:{owner:run.owner,repo:run.repo,branch:run.branch,api:run.api,prefix:run.prefix,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild,runId:run.runId,config:run.config,today:run.today,start:run.start,until:run.until,items,coverage,rejected,grounding,validationWarnings,createdAt:new Date().toISOString()}}];\n"
+        "jsCode": "const run=$('Build Research Prompt').first().json;\nconst response=$json.body ?? $json;\nconst c=response.candidates?.[0];\nconst textEnvelope=!c&&typeof response.text==='string';\nif(!c&&!textEnvelope) throw new Error('Unsupported research input format: expected a Gemini API candidates array or a text field with forwarded groundingMetadata. Connect the Gemini Research HTTP output, not a transformed item that drops its response fields.');\nconst finishReason=c?c.finishReason:response.finishReason;\nif((c||finishReason!==undefined)&&finishReason!=='STOP') throw new Error(`Gemini returned no complete answer (finishReason=${finishReason||'missing'}). Inspect the raw response for a block or truncation; an output-limit increase is relevant only for token-limit truncation.`);\nconst text=textEnvelope?response.text:(Array.isArray(c.content?.parts)?c.content.parts:[]).filter(p=>p&&!p.thought&&typeof p.text==='string').map(p=>p.text).join('');\nif(!text.trim()) throw new Error(`Gemini returned an empty answer (finishReason=${finishReason||'not forwarded'}, responseId=${response.responseId||'unknown'}): no non-thought text in the response. Search metadata and token counts cannot replace the missing JSON. The workflow stops without publishing; inspect Gemini Research / Retry Empty Gemini Response or rerun research.`);\nconst grounding=(c?c.groundingMetadata:response.groundingMetadata) ?? {};\nconst queries=Array.isArray(grounding.webSearchQueries)?grounding.webSearchQueries.filter(q=>typeof q==='string'&&q.trim()):[];\nconst chunks=Array.isArray(grounding.groundingChunks)?grounding.groundingChunks:[];\nconst usableChunks=chunks.filter(chunk=>typeof chunk?.web?.uri==='string'&&/^https?:\\/\\/\\S+$/.test(chunk.web.uri));\nlet data;\r\ntry {data=JSON.parse(text.trim().replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/,''));} catch {throw new Error('Malformed research JSON: fail closed. Inspect Gemini response.');}\r\nif (!Array.isArray(data.items) || !Array.isArray(data.coverage) || data.items.length>run.config.max_items) throw new Error('Invalid evidence schema / item limit.');\n// Search activity and returned source evidence are different conditions.\n// A search with zero candidates can legitimately have no groundingChunks.\nif(!queries.length && !usableChunks.length) {\n if(textEnvelope) throw new Error(`Text-only n8n output: research JSON parsed (${data.items.length} items), but search grounding metadata was not forwarded. Connect the supplied Gemini Research HTTP response to this parser, or forward the original groundingMetadata alongside text. Coverage claims and URLs inside model text do not prove search was used. Increasing the token limit will not repair this format mismatch.`);\n throw new Error(`No search activity or source evidence in Gemini metadata (queries=0, usable_sources=0, items=${data.items.length}). Check Gemini Research sends tools: [{google_search:{}}], then rerun that node. Search-suggestion HTML alone is not source evidence.`);\n}\nif(data.items.length && !usableChunks.length) throw new Error(`Gemini returned ${data.items.length} candidate(s) but no usable grounding source chunks (queries=${queries.length}). Candidates cannot proceed without source evidence. Rerun Gemini Research; do not bypass this check.`);\nconst researchStatus=usableChunks.length?'sources_returned':'searched_no_usable_sources';\nconst host=u=>{const m=/^https:\\/\\/([^/:?#]+)(?::443)?(?:[/?#]|$)/i.exec(u||''); if(!m) throw new Error('HTTPS source link required');return m[1].toLowerCase().replace(/^www\\./,'');};\r\nconst allowed=run.config.sources.map(s=>host(s.url));\r\nconst validDate=v=>v===null || (typeof v==='string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v) && !isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0,10)===v);\r\nconst seen=new Set(), rejected=[];\nconst validationWarnings=[];\nif(textEnvelope&&finishReason===undefined) validationWarnings.push('Text envelope omitted finishReason. JSON structure was validated, but upstream completion status was not supplied.');\nif(researchStatus==='searched_no_usable_sources') validationWarnings.push(`Search activity recorded (${queries.length} queries), but no usable source evidence or candidates returned. Research coverage is incomplete; this does not establish that no relevant updates exist.`);\nif(!queries.length && usableChunks.length) validationWarnings.push('Source chunks returned, but search-query details are absent. Verify the sources independently.');\nfor(const [index,support] of (grounding.groundingSupports||[]).entries()) {\n if(!Array.isArray(support.groundingChunkIndices) || support.groundingChunkIndices.some(i=>!Number.isInteger(i)||i<0||i>=chunks.length)) {\n  validationWarnings.push(`Grounding support ${index+1} references a missing source chunk. Grounding metadata is inconsistent; it does not establish item-level support.`);\n }\n}\nconst enums={type:['paper','standard','conference','webinar'],date_type:['published','updated','unknown'],access:['full_text','abstract_only','metadata_only'],publication_status:['preprint','published','draft','approved','announcement','unknown']};\nconst items=[];\nfor (const [i, original] of data.items.entries()) {\n const item={...original};\n const reasons=[],normalizations=[];\n for (const key of ['title','source','link','summary','relevance','type','access','publication_status','date_type']) if(typeof item[key]!=='string' || !item[key].trim()) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['author','evidence','evidence_location']) if(item[key]!==null && typeof item[key]!=='string') throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['date','event_date','deadline']) if(!validDate(item[key])) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for(const [field,values] of Object.entries(enums)) if(!values.includes(item[field])) reasons.push(`Invalid ${field}: ${JSON.stringify(item[field])}. Allowed: ${values.join(', ')}.`);\n if(item.date && item.date>run.today) throw new Error('Future publication date: distinguish event date.');\r\n if((item.date===null)!==(item.date_type==='unknown')) throw new Error('Date/date_type mismatch.');\r\n // Unwrap only an unambiguous Markdown link whose label and target are identical.\n const markdown=/^\\[(https:\\/\\/[^\\s]+)\\]\\((https:\\/\\/[^\\s]+)\\)$/.exec(item.link.trim());\n if(markdown && markdown[1]===markdown[2]) {item.link=markdown[2];normalizations.push('Identical Markdown URL wrapper removed');}\n let h;\n try {\n  if(/[\\s<>\\\\]/.test(item.link)) throw new Error('Invalid URL characters');\n  h=host(item.link);\n } catch {reasons.push('Invalid link: provide one plain HTTPS source URL, without Markdown or placeholders.');}\n if(h) {\n  if(!allowed.some(a=>h===a || h.endsWith('.'+a))) reasons.push('Outside configured source domains');\n  else if(!run.config.sources.some(s=>{const a=host(s.url);return (h===a || h.endsWith('.'+a)) && s.types.includes(item.type);})) reasons.push('Item type excluded by source configuration');\n  if(h==='arxiv.org' || h.endsWith('.arxiv.org')) {\n   const arxivPath=item.link.replace(/^https:\\/\\/[^/]+/,'').split(/[?#]/)[0];\n   if(!/^\\/(?:abs|pdf)\\/(?:\\d{2}(?:0[1-9]|1[0-2])\\.\\d{4,5}|[a-z-]+(?:\\.[A-Z]{2})?\\/\\d{7})(?:v[1-9]\\d*)?(?:\\.pdf)?$/.test(arxivPath)) reasons.push('Invalid arXiv paper identifier: placeholder or non-paper URL; a real abs/pdf identifier is required.');\n  }\n }\n if(reasons.length) {rejected.push({input_index:i+1,title:item.title,reason:reasons.join(' '),original});continue;}\n const recent=item.date && item.date>=run.start && item.date<=run.today;\r\n const upcoming=['conference','webinar'].includes(item.type) && item.event_date && item.event_date>=run.today && item.event_date<=run.until;\r\n if(!recent && !upcoming) {rejected.push({title:item.title,reason:'Outside window or date unknown'});continue;}\r\n const key=item.link.replace(/#.*$/,'').replace(/\\?.*$/,'').replace(/\\/$/,'');\r\n if(seen.has(key)) {rejected.push({title:item.title,reason:'Duplicate source URL in this run'});continue;}\r\n seen.add(key);\r\n items.push({...item,id:'E'+String(items.length+1).padStart(2,'0'),verification:'Human verification required',flags:[...normalizations,...(!item.author?['Author unknown']:[]),...(!item.evidence?['No supporting excerpt']:[]),...(item.access!=='full_text'?['Full text not checked']:[]),...(validationWarnings.length?['Inconsistent grounding metadata; verify original source independently']:[])]});\n}\r\nconst coverage=run.config.sources.map(s=>{\r\n const row=data.coverage.find(c=>c.source===s.name);\r\n return {source:s.name,status:['searched','inaccessible','not_searched'].includes(row?.status)?row.status:'not_searched',note:typeof row?.note==='string'?row.note:'No source coverage report returned'};\r\n});\r\nif(data.items.length && !items.length) validationWarnings.push('All returned candidates were excluded. This is not evidence that no relevant updates exist. Review the rejection reasons and rerun research.');\nreturn [{json:{owner:run.owner,repo:run.repo,branch:run.branch,api:run.api,prefix:run.prefix,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild,runId:run.runId,config:run.config,today:run.today,start:run.start,until:run.until,items,coverage,rejected,grounding,researchStatus,validationWarnings,createdAt:new Date().toISOString()}}];\n"
       },
       "notes": "Source: parse-research-json.js. Edit the file, run npm run build, then reimport the JSON.",
       "notesInFlow": false
@@ -285,7 +362,7 @@
       "parameters": {
         "resume": "form",
         "formTitle": "Engineering Journalist — Read / Ignore / Investigate",
-        "formDescription": "={{ 'Open this evidence snapshot: ' + $('Render Draft Dashboard').first().json.reviewPagesUrl + '\nGitHub file: ' + $('Render Draft Dashboard').first().json.reviewGithubUrl + '\nVerify original sources. Read = include, Ignore = exclude, Investigate = hold. There are ' + $('Render Draft Dashboard').first().json.items.length + ' items. Leave unused ID slots blank. Zero items: submit your name to acknowledge coverage.' }}",
+        "formDescription": "={{ 'Open this evidence snapshot: ' + $('Render Draft Dashboard').first().json.reviewPagesUrl + '<br>GitHub file: ' + $('Render Draft Dashboard').first().json.reviewGithubUrl + '<br>Verify original sources. Read = include, Ignore = exclude, Investigate = hold. There are ' + $('Render Draft Dashboard').first().json.items.length + ' items. Leave unused ID slots blank. Zero items: submit your name to acknowledge coverage.' }}",
         "formFields": {
           "values": [
             {
@@ -628,7 +705,7 @@
       "parameters": {
         "resume": "form",
         "formTitle": "Approve exact weekly briefing for publication",
-        "formDescription": "={{ 'Review the immutable draft: ' + $('Render Reviewed Dashboard').first().json.draftPagesUrl + '\nPinned GitHub file: https://github.com/' + $('Render Reviewed Dashboard').first().json.owner + '/' + $('Render Reviewed Dashboard').first().json.repo + '/blob/' + $('Archive Reviewed Draft').first().json.body.commit.sha + '/' + $('Render Reviewed Dashboard').first().json.draftPath + '\nApprove publishes these exact bytes to index.html. Reject preserves the previous dashboard. The root review.html is a convenience pointer only.' }}",
+        "formDescription": "={{ 'Review the immutable draft: ' + $('Render Reviewed Dashboard').first().json.draftPagesUrl + '<br>Pinned GitHub file: https://github.com/' + $('Render Reviewed Dashboard').first().json.owner + '/' + $('Render Reviewed Dashboard').first().json.repo + '/blob/' + $('Archive Reviewed Draft').first().json.body.commit.sha + '/' + $('Render Reviewed Dashboard').first().json.draftPath + '<br>Approve publishes these exact bytes to index.html. Reject preserves the previous dashboard. The root review.html is a convenience pointer only.' }}",
         "formFields": {
           "values": [
             {
@@ -994,6 +1071,46 @@
       ]
     },
     "Gemini Research": {
+      "main": [
+        [
+          {
+            "node": "Check Research Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Research Response": {
+      "main": [
+        [
+          {
+            "node": "Retry Empty Answer?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Empty Answer?": {
+      "main": [
+        [
+          {
+            "node": "Retry Empty Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Research JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Empty Gemini Response": {
       "main": [
         [
           {

@@ -12,11 +12,13 @@ The project follows the [competitive-intelligence-demo reference](https://github
 2. In GitHub Pages, select **Deploy from a branch → main → / (root)**. `.nojekyll` is included. Pages is optional if you download and open the HTML locally.
 3. Import **`engineering-journalist.json`** into n8n.
 4. On each GitHub HTTP Request node, select your existing **GitHub API** credential with repository **Contents: read and write** access. Also allow access to this repository if your token is restricted to selected repositories. If your existing token uses Header Auth, switch those nodes to Generic Credential Type → Header Auth and select it instead.
-5. On **Gemini Research**, select your existing **Google Gemini(PaLM) API** credential. This HTTP node enables Google Search using `generateContent`; it reuses the same API credential as the Gemini Chat Model. The starter model is `gemini-2.5-flash`; change `gemini_model` in the config if a different Search-capable model is available to your key.
+5. On **Gemini Research** and **Retry Empty Gemini Response**, select the same existing **Google Gemini(PaLM) API** credential. These HTTP nodes enable Google Search using `generateContent`; they reuse the same API credential as the Gemini Chat Model. The starter model is `gemini-2.5-flash`; change `gemini_model` in the config if a different Search-capable model is available to your key.
 6. Edit `engineering-journalist.config.json` for your topic and push the change. No topic is hardcoded in the workflow.
 7. Run **Manual Trigger**. At **Human Evidence Review**, open the waiting execution's resume-form URL from n8n, inspect the linked evidence snapshot and original sources, then choose Read, Ignore or Investigate for each populated ID.
 8. At **Human Publication Approval**, open the run-specific draft and choose **Approve** or **Reject**. Approve promotes the exact archived draft bytes to the root `index.html`; Reject preserves the existing dashboard.
 9. After a successful run, enable **Weekly Schedule** and publish/activate the workflow. It is disabled in the export. The configured schedule is Monday at 09:00, Africa/Cairo; research date windows use UTC calendar dates.
+
+**Parser input:** the supplied HTTP node returns `body.candidates[0]`, including answer text and grounding metadata. Some n8n LLM-chain nodes instead return only `{ "text": "..." }`. Do not substitute that output without preserving the original provider `groundingMetadata`: the model's written coverage claims are not search metadata. The parser supports a text envelope when genuine metadata is forwarded alongside it, and reports the format mismatch clearly when it is absent. Preserve the original `finishReason` too when available. Never fabricate metadata to satisfy the validator.
 
 GitHub Pages URLs after deployment:
 
@@ -57,6 +59,7 @@ The two human gates serve different purposes: per-item triage implements the exe
 | `dashboard_template.html` | Fixed report shell, layout and styles; named injection tokens |
 | `repository-settings.js` | GitHub owner, repository and branch; no research scope |
 | `build-research-prompt.js` | Decode fetched files, validate config and substitute prompt tokens |
+| `check-research-response.js` | Detect STOP responses with no answer text and request one retry |
 | `parse-research-json.js` | Validate Gemini output, dates, source domains/types and duplicates |
 | `render-report.js` | Shared deterministic renderer with HTML escaping |
 | `render-draft-dashboard.js` | Build the evidence review artifact |
@@ -114,8 +117,10 @@ After automated GitHub commits, pull the remote changes before pushing further l
 ## Reliability controls and limits
 
 - Missing config/template, failed API calls, incomplete Gemini responses, missing search grounding, invalid JSON, invalid dates and incomplete decisions stop before production publication.
+- A Gemini `STOP` response without non-thought text is retried once using the same request and credential. The additional API call may incur usage. If the retry is empty too, the parser reports an empty-answer error and stops. It never fabricates `items: []` from missing content. Valid empty-result JSON is different and follows the coverage-review path. HTTP errors, blocked/truncated responses and malformed nonempty JSON do not enter this empty-answer retry branch.
 - Invalid item enums, malformed/placeholder paper links, and out-of-scope candidates are excluded with field-specific reasons; valid candidates remain available for review. `announcement` is a publication status, not an item type. An all-excluded result is clearly flagged and must not be interpreted as no updates. Inconsistent grounding source references are flagged for independent human checking, not treated as verified citations.
 - A syntactically valid JSON record or Google Search grounding is not proof of a claim. The human checks original sources and the supporting passage.
+- Search queries with `items: []` and no source chunks proceed to human review as `searched_no_usable_sources`, with an incomplete-coverage warning. Nonempty candidates without usable source chunks remain blocked. No queries and no usable sources also remain blocked, even when the answer is empty. Source chunks without query details are retained with a warning. See the [Gemini grounding metadata reference](https://ai.google.dev/api/generate-content#GroundingMetadata) for the separate query and source fields.
 - The renderer escapes source values and isolates Google-provided search-suggestion HTML in a sandboxed iframe.
 - Publication fetches the draft at the approved commit, checks its blob identity and compares its bytes with the captured draft. It never regenerates approved content.
 - Rejection is a normal outcome; its decision is archived and the previous `index.html` remains unchanged. A later failed publication may have an archived approval but no new production commit; inspect the execution result.
