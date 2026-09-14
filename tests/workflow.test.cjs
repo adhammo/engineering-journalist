@@ -207,3 +207,39 @@ test('Agent without search trace fails closed',()=>assert.throws(()=>validate({o
 test('Agent fabricated URL is excluded',()=>{const r=validate(agentResponse([{...item,link:'https://arxiv.org/abs/2609.12345'}]));assert.equal(r.items.length,0);assert(r.rejected[0].reason.includes('not returned'));});
 test('Agent empty search is recorded as incomplete',()=>{const r=validate(agentResponse([],[]));assert.equal(r.researchStatus,'search_attempted_no_usable_results');assert.equal(r.searchEvidence.length,1);});
 console.log(`${count} checks passed.`);
+
+test('n8n sanitized tool name and wrapped observations retain evidence',()=>{
+ const r=agentResponse();r.intermediateSteps[0].action={tool:'SearXNG_Search',toolInput:{input:'site:arxiv.org chiplet'}};
+ r.intermediateSteps[0].observation=JSON.stringify([{response:r.intermediateSteps[0].observation}]);
+ const parsed=validate(r);assert.equal(parsed.items.length,1);assert.equal(parsed.searchEvidence[0].query,'site:arxiv.org chiplet');
+});
+test('Unknown tool cannot establish search evidence',()=>{const r=agentResponse();r.intermediateSteps[0].action.tool='unrelated';assert.throws(()=>validate(r),/no search tool trace/);});
+test('Literal null date normalized transparently',()=>{const r=validate(agentResponse([{...item,date:'null',date_type:'unknown'}]));assert.equal(r.items[0].date,null);assert(r.items[0].flags.some(f=>f.includes('normalized')));});
+console.log(`${count} checks passed.`);
+
+for(const [name,model,retrieved] of [
+ ['arxiv','https://arxiv.org/abs/2609.0001','https://arxiv.org/html/2609.0001v3'],
+ ['acm','https://dl.acm.org/doi/10.1145/123.456','https://dl.acm.org/doi/full/10.1145/123.456'],
+ ['ieee','https://ieeexplore.ieee.org/document/123456','https://ieeexplore.ieee.org/iel8/40/123/123456.pdf']
+]) test(name+' publication ID preserves retrieved URL',()=>{
+ const r=validate(agentResponse([{...item,link:model}],[{link:retrieved}]));assert.equal(r.items.length,1);assert.equal(r.items[0].link,retrieved);assert.equal(r.items[0].model_link,model);
+});
+test('Explicit arxiv version mismatch stays excluded',()=>{const r=validate(agentResponse([{...item,link:item.link+'v2'}],[{link:'https://arxiv.org/html/2609.0001v3'}]));assert.equal(r.items.length,0);});
+test('Same title and different publication ID stays excluded',()=>{const r=validate(agentResponse([item],[{title:item.title,link:'https://arxiv.org/html/2609.0002'}]));assert.equal(r.items.length,0);});
+test('Lookalike publisher domain stays excluded',()=>{const r=validate(agentResponse([item],[{link:'https://arxiv.org.evil.test/html/2609.0001'}]));assert.equal(r.items.length,0);});
+console.log(`${count} checks passed.`);
+
+const snapshotContext={'Render Draft Dashboard':{api:'https://api.github.com/repos/test/repo/contents/',reviewPath:'runs/test/evidence.html',commit:{content:Buffer.from('evidence').toString('base64'),branch:'main',message:'test'}}};
+test('New evidence snapshot has no SHA',()=>{const r=execute('Prepare Evidence Snapshot',{statusCode:404},snapshotContext);assert(!r.body.sha);});
+test('Identical evidence retry includes current blob SHA',()=>{const r=execute('Prepare Evidence Snapshot',{statusCode:200,body:{encoding:'base64',content:Buffer.from('evidence').toString('base64')+'\n',sha:'saved-sha'}},snapshotContext);assert.equal(r.body.sha,'saved-sha');});
+test('Different evidence cannot overwrite archived snapshot',()=>assert.throws(()=>execute('Prepare Evidence Snapshot',{statusCode:200,body:{encoding:'base64',content:Buffer.from('changed').toString('base64'),sha:'saved-sha'}},snapshotContext),/fresh execution/));
+test('Snapshot read failure prevents writes',()=>assert.throws(()=>execute('Prepare Evidence Snapshot',{statusCode:403},snapshotContext),/Refusing write/));
+console.log(`${count} checks passed.`);
+
+test('Research system instructions require separate keyword fallback searches',()=>{
+ const prompt=nodes.Research.parameters.options.systemMessage;
+ assert(prompt.includes('one configured keyword at a time'));
+ assert(prompt.includes('try each remaining configured keyword separately'));
+ assert(prompt.includes('must not stop research of the other sources'));
+});
+console.log(`${count} checks passed.`);

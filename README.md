@@ -88,3 +88,7 @@ The 40-minute exercise uses 10 minutes for manual chat and 30 minutes for automa
 Research has no lookback or event-date horizon and no configured result-count cap. All valid results returned for the configured source scope are retained, deduplicated and sorted by publication/update date from newest to oldest; unknown dates are last. Event dates are displayed separately and never substituted for publication dates. The review form accepts any returned item count using one `ID=Decision` line per item. Every item still requires a decision.
 
 All results means relevant results actually obtained. The search tool retains all results on the first page per query. The agent has a 30-iteration execution budget and model context/output limits still apply. Coverage is not exhaustive and must disclose these limits.
+
+Publisher URL variants for arXiv, ACM DOI and IEEE Xplore are matched by publication ID. The report retains the actual retrieved URL (including version); the original generated URL is kept as `model_link`. Explicit arXiv version mismatches remain excluded. This establishes a retrieved publication lead, not factual verification.
+
+Evidence snapshot retries fetch the existing file SHA and allow only identical content. If a rerun produces different evidence for the same run ID, start from Manual Trigger with Repository Settings unpinned. This preserves the original evidence snapshot.

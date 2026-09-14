@@ -2,16 +2,36 @@ const run=$('Build Research Prompt').first().json;
 const response=$json.body ?? $json;
 const agentEnvelope=typeof response.output==='string';
 const searchEvidence=[];
+// Match only recognized publisher URL forms, never titles or arbitrary URL suffixes.
+function publicationIdentity(link) {
+ const m=/^https:\/\/(arxiv\.org|dl\.acm\.org|ieeexplore\.ieee\.org)(\/[^?#]*)(?:[?#].*)?$/.exec(link||'');
+ if(!m) return null;
+ let id;
+ if(m[1]==='arxiv.org'&&(id=/^\/(?:abs|html|pdf)\/(\d{2}(?:0[1-9]|1[0-2])\.\d{4,5})(v[1-9]\d*)?(?:\.pdf)?\/?$/.exec(m[2]))) return {key:'arxiv:'+id[1],version:id[2]||null};
+ if(m[1]==='dl.acm.org'&&(id=/^\/doi\/(?:full\/|abs\/|pdf\/|epdf\/)?(10\.\d{4,9}\/[^/]+)\/?$/.exec(m[2]))) return {key:'acm:'+id[1],version:null};
+ if(m[1]==='ieeexplore.ieee.org'&&(id=/^\/(?:document\/(\d+)\/?|iel[578]\/\d+\/\d+\/(\d+)\.pdf)$/.exec(m[2]))) return {key:'ieee:'+(id[1]||id[2]),version:null};
+ return null;
+}
+// n8n can serialize tool observations as [{response: '<result objects>'}].
+function searchResults(value,depth=0) {
+ if(depth>6||value==null) return [];
+ if(typeof value==='string') {
+  try {return searchResults(JSON.parse(value),depth+1);}
+  catch {try {return searchResults(JSON.parse('['+value+']'),depth+1);}catch {return [];}}
+ }
+ if(Array.isArray(value)) return value.flatMap(v=>searchResults(v,depth+1));
+ if(typeof value==='object') {
+  if(typeof value.link==='string') return [value];
+  if(Object.hasOwn(value,'response')) return searchResults(value.response,depth+1);
+ }
+ return [];
+}
 if(agentEnvelope) {
  for(const step of response.intermediateSteps||[]) {
-  if(step.action?.tool!=='searxng-search') continue;
+  if(!['searxng-search','SearXNG_Search'].includes(step.action?.tool)) continue;
   const observation=step.observation;
-  let results=[];
-  if(typeof observation==='string') {
-   try {const parsed=JSON.parse(observation);results=Array.isArray(parsed)?parsed:[parsed];}
-   catch {try {results=JSON.parse('['+observation+']');}catch {}}
-  }
-  searchEvidence.push({query:step.action.toolInput,observation,results:results.filter(r=>typeof r?.link==='string'&&/^https:\/\/\S+$/.test(r.link))});
+  const results=searchResults(observation);
+  searchEvidence.push({query:typeof step.action.toolInput==='string'?step.action.toolInput:step.action.toolInput?.input,observation,results:results.filter(r=>typeof r?.link==='string'&&/^https:\/\/\S+$/.test(r.link))});
  }
  if(!searchEvidence.length) throw new Error('Research returned no search tool trace. Connect SearXNG and enable Return Intermediate Steps on Research.');
  response.text=response.output;
@@ -58,6 +78,7 @@ const items=[];
 for (const [i, original] of data.items.entries()) {
  const item={...original};
  const reasons=[],normalizations=[];
+ for(const key of ['date','event_date','deadline']) if(item[key]==='null') {item[key]=null;normalizations.push(`${key}: string "null" normalized to JSON null`);}
  for (const key of ['title','source','link','summary','relevance','type','access','publication_status','date_type']) if(typeof item[key]!=='string' || !item[key].trim()) throw new Error(`Item ${i+1}: invalid ${key}`);
  for (const key of ['author','evidence','evidence_location']) if(item[key]!==null && typeof item[key]!=='string') throw new Error(`Item ${i+1}: invalid ${key}`);
  for (const key of ['date','event_date','deadline']) if(!validDate(item[key])) throw new Error(`Item ${i+1}: invalid ${key}`);
@@ -67,7 +88,18 @@ for (const [i, original] of data.items.entries()) {
  // Unwrap only an unambiguous Markdown link whose label and target are identical.
  const markdown=/^\[(https:\/\/[^\s]+)\]\((https:\/\/[^\s]+)\)$/.exec(item.link.trim());
  if(markdown && markdown[1]===markdown[2]) {item.link=markdown[2];normalizations.push('Identical Markdown URL wrapper removed');}
- if(agentEnvelope&&!searchEvidence.some(s=>s.results.some(r=>r.link===item.link))) reasons.push('URL not returned by the search tool in this execution');
+ if(agentEnvelope) {
+  const retrieved=searchEvidence.flatMap(s=>s.results);
+  if(!retrieved.some(r=>r.link===item.link)) {
+   const identity=publicationIdentity(item.link);
+   const match=identity&&retrieved.find(r=>{const other=publicationIdentity(r.link);return other&&other.key===identity.key&&(!identity.version||identity.version===other.version);});
+   if(match) {
+    item.model_link=item.link;
+    item.link=match.link;
+    normalizations.push('Publisher publication ID matched; using actual retrieved URL and version instead of model URL');
+   } else reasons.push('URL not returned by the search tool in this execution, and no matching publisher publication ID found');
+  }
+ }
  let h;
  try {
   if(/[\s<>\\]/.test(item.link)) throw new Error('Invalid URL characters');
@@ -78,7 +110,7 @@ for (const [i, original] of data.items.entries()) {
   else if(!run.config.sources.some(s=>{const a=host(s.url);return (h===a || h.endsWith('.'+a)) && s.types.includes(item.type);})) reasons.push('Item type excluded by source configuration');
   if(h==='arxiv.org' || h.endsWith('.arxiv.org')) {
    const arxivPath=item.link.replace(/^https:\/\/[^/]+/,'').split(/[?#]/)[0];
-   if(!/^\/(?:abs|pdf)\/(?:\d{2}(?:0[1-9]|1[0-2])\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v[1-9]\d*)?(?:\.pdf)?$/.test(arxivPath)) reasons.push('Invalid arXiv paper identifier: placeholder or non-paper URL; a real abs/pdf identifier is required.');
+   if(!/^\/(?:abs|html|pdf)\/(?:\d{2}(?:0[1-9]|1[0-2])\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v[1-9]\d*)?(?:\.pdf)?\/?$/.test(arxivPath)) reasons.push('Invalid arXiv paper identifier: placeholder or non-paper URL; a real abs/html/pdf identifier is required.');
   }
  }
  if(reasons.length) {rejected.push({input_index:i+1,title:item.title,reason:reasons.join(' '),original});continue;}
