@@ -18,7 +18,7 @@
     "system",
     "verification"
   ],
-  "lookback_days": 7,
+  "lookback_days": 1000,
   "upcoming_days": 90,
   "max_items": 8,
   "sources": [
