@@ -114,6 +114,7 @@ After automated GitHub commits, pull the remote changes before pushing further l
 ## Reliability controls and limits
 
 - Missing config/template, failed API calls, incomplete Gemini responses, missing search grounding, invalid JSON, invalid dates and incomplete decisions stop before production publication.
+- Invalid item enums, malformed/placeholder paper links, and out-of-scope candidates are excluded with field-specific reasons; valid candidates remain available for review. `announcement` is a publication status, not an item type. An all-excluded result is clearly flagged and must not be interpreted as no updates. Inconsistent grounding source references are flagged for independent human checking, not treated as verified citations.
 - A syntactically valid JSON record or Google Search grounding is not proof of a claim. The human checks original sources and the supporting passage.
 - The renderer escapes source values and isolates Google-provided search-suggestion HTML in a sandboxed iframe.
 - Publication fetches the draft at the approved commit, checks its blob identity and compares its bytes with the captured draft. It never regenerates approved content.

@@ -10,7 +10,7 @@ function render(run, template, final=false) {
  const values={
   TITLE:e(run.config.topic),
   HEADER:`<div class="eyebrow">Engineering Journalist · ${final?'Reviewed reading selections':'Evidence awaiting review'}</div><h1>${e(run.config.topic)}</h1><p>${e(run.start)} — ${e(run.today)} · Upcoming events through ${e(run.until)}</p><p>${run.items.length} candidates · ${final?reads.length+' selected':'Human gate required'}</p>`,
-  NOTICE:final?'Read means selected for reading, not technical endorsement. Facts were not regenerated after review.':'Open original sources. Verify title, author, date and supporting evidence. Use the private n8n form for Read, Ignore or Investigate. The form link is not published here.',
+  NOTICE:(final?'Read means selected for reading, not technical endorsement. Facts were not regenerated after review.':'Open original sources. Verify title, author, date and supporting evidence. Use the private n8n form for Read, Ignore or Investigate. The form link is not published here.')+(run.validationWarnings?.length?'<br><b>Validation warnings:</b> '+run.validationWarnings.map(e).join(' '):''),
   BODY:content,
   COVERAGE:run.coverage.map(c=>`<tr><td>${e(c.source)}</td><td>${e(c.status)}</td><td>${e(c.note)}</td></tr>`).join(''),
   FILTERED:`<details><summary>Filtered candidates (${run.rejected.length})</summary><ul>${run.rejected.map(x=>`<li>${e(x.title)}: ${e(x.reason)}</li>`).join('')}</ul></details>`,

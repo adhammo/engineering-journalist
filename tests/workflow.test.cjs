@@ -22,7 +22,7 @@ context['Fetch Prompt Template']=fileResponse(read('research_prompt_template.md'
 context['Fetch Dashboard Template']=fileResponse(read('dashboard_template.html'));
 const research=execute('Build Research Prompt',{});
 context['Build Research Prompt']=research;
-const item={title:'TEST FIXTURE — IC paper',author:'Test Author',source:'arXiv',date:research.today,date_type:'published',link:'https://arxiv.org/abs/0000.00000',type:'paper',event_date:null,deadline:null,evidence:'TEST <script>alert(1)</script> excerpt',evidence_location:'Abstract',summary:'TEST FIXTURE summary, not real research.',relevance:'TEST FIXTURE relevance judgment.',access:'abstract_only',publication_status:'preprint'};
+const item={title:'TEST FIXTURE — IC paper',author:'Test Author',source:'arXiv',date:research.today,date_type:'published',link:'https://arxiv.org/abs/2609.0001',type:'paper',event_date:null,deadline:null,evidence:'TEST <script>alert(1)</script> excerpt',evidence_location:'Abstract',summary:'TEST FIXTURE summary, not real research.',relevance:'TEST FIXTURE relevance judgment.',access:'abstract_only',publication_status:'preprint'};
 function response(items=[item]){return {body:{candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({items,coverage:[{source:'arXiv',status:'searched',note:'TEST FIXTURE'}]})}]},groundingMetadata:{webSearchQueries:['TEST FIXTURE'],groundingChunks:[{web:{uri:item.link,title:item.title}}]}}]}};}
 const validate=r=>execute('Parse Research JSON',r);
 test('Export matches source-controlled code',()=>execFileSync(process.execPath,[path.join(root,'scripts/build-workflow.cjs'),'--check'],{stdio:'pipe'}));
@@ -54,6 +54,35 @@ test('Unconfigured source type filtered',()=>assert.equal(validate(response([{..
 test('Old paper filtered',()=>assert.equal(validate(response([{...item,date:'2001-01-01'}])).items.length,0));
 test('Upcoming event with unknown announcement date retained',()=>assert.equal(validate(response([{...item,type:'conference',link:'https://www.isscc.org/program',source:'ISSCC',date:null,date_type:'unknown',event_date:research.until}])).items.length,1));
 test('Zero eligible items is a valid evidence artifact',()=>assert.equal(validate(response([])).items.length,0));
+test('Announcement type is excluded with specific diagnostics; valid items survive',()=>{
+ const r=validate(response([{...item,type:'announcement'},item]));
+ assert.equal(r.items.length,1);assert.equal(r.items[0].id,'E01');
+ assert(r.rejected[0].reason.includes('Invalid type: "announcement"'));assert(r.rejected[0].reason.includes('paper, standard, conference, webinar'));
+});
+test('Invalid access enum is not silently repaired',()=>{
+ const r=validate(response([{...item,access:'unknown'}]));assert.equal(r.items.length,0);assert(r.rejected[0].reason.includes('Invalid access'));
+});
+test('Announcement publication status remains allowed',()=>{
+ const r=validate(response([{...item,type:'conference',publication_status:'announcement',link:'https://www.isscc.org/program',source:'ISSCC'}]));assert.equal(r.items.length,1);
+});
+test('Identical Markdown URL wrapper can be removed without guessing',()=>{
+ const r=validate(response([{...item,link:`[${item.link}](${item.link})`}]));assert.equal(r.items[0].link,item.link);assert(r.items[0].flags.includes('Identical Markdown URL wrapper removed'));
+});
+test('Misleading Markdown link is excluded',()=>assert.equal(validate(response([{...item,link:`[${item.link}](https://attacker.invalid/)`}])).items.length,0));
+test('Placeholder arXiv identifier excluded',()=>{
+ const r=validate(response([{...item,link:'https://arxiv.org/abs/2609.0xxxx'}]));assert.equal(r.items.length,0);assert(r.rejected[0].reason.includes('Invalid arXiv paper identifier'));
+});
+test('Reported failure excludes both candidates and exposes inconsistent grounding',()=>{
+ const bad=response([
+  {...item,title:'Beyond the Die Boundary',type:'announcement',publication_status:'announcement',source:'Arteris',link:'https://www.arteris.com/blog/beyond-the-die-boundary'},
+  {...item,title:'Fengshui',author:null,link:'https://arxiv.org/abs/2609.0xxxx'}
+ ]);
+ bad.body.candidates[0].groundingMetadata.groundingSupports=[{groundingChunkIndices:[0]},{groundingChunkIndices:[1]}];
+ const r=validate(bad);assert.equal(r.items.length,0);assert.equal(r.rejected.length,2);
+ assert(r.rejected[0].reason.includes('Outside configured source domains'));assert(r.rejected[0].reason.includes('Invalid type'));
+ assert(r.validationWarnings.some(x=>x.includes('missing source chunk')));assert(r.validationWarnings.some(x=>x.includes('not evidence that no relevant updates exist')));
+ const html=execute('Render Draft Dashboard',r).reviewHtml;assert(html.includes('Validation warnings:'));assert(html.includes('Invalid arXiv paper identifier'));
+});
 const evidence=validate(response([item,{...item,link:item.link+'1'},{...item,link:item.link+'2'}]));
 const draft=execute('Render Draft Dashboard',evidence);
 context['Render Draft Dashboard']=draft;
