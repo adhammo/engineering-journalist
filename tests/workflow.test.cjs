@@ -56,7 +56,6 @@ test('Missing config stops without seeding defaults',()=>assert.throws(()=>execu
 test('Invalid source revision stops',()=>assert.throws(()=>execute('Build Research Prompt',{}, {'Resolve Source Revision':{body:{sha:null}}})));
 test('Missing prompt placeholder stops',()=>assert.throws(()=>execute('Build Research Prompt',{}, {'Fetch Prompt Template':fileResponse('incomplete')})));
 test('Invalid source types stop',()=>assert.throws(()=>execute('Build Research Prompt',{}, {'Fetch Config':fileResponse(JSON.stringify({...config,sources:[{name:'bad',url:'https://example.com',types:['advertisement']}]}))})));
-test('More than eight candidates is rejected in config',()=>assert.throws(()=>execute('Build Research Prompt',{}, {'Fetch Config':fileResponse(JSON.stringify({...config,max_items:9}))})));
 test('Prompt placeholders do not recursively alter config values',()=>{const r=execute('Build Research Prompt',{}, {'Fetch Config':fileResponse(JSON.stringify({...config,topic:'{{TODAY}} literal'}))});assert(r.prompt.includes('{{TODAY}} literal'));});
 test('Valid grounded evidence passes',()=>assert.equal(validate(response()).items.length,1));
 test('Missing grounding fails closed',()=>{const r=response();delete r.body.candidates[0].groundingMetadata;assert.throws(()=>validate(r));});
@@ -90,8 +89,8 @@ test('Unknown author is explicit',()=>assert(validate(response([{...item,author:
 test('Duplicate URL filtered',()=>{const r=validate(response([item,item]));assert.equal(r.items.length,1);assert.equal(r.rejected.length,1);});
 test('Unconfigured domain filtered',()=>assert.equal(validate(response([{...item,link:'https://attacker.invalid/paper'}])).items.length,0));
 test('Unconfigured source type filtered',()=>assert.equal(validate(response([{...item,type:'standard'}])).items.length,0));
-test('Old paper filtered',()=>assert.equal(validate(response([{...item,date:'2001-01-01'}])).items.length,0));
-test('Upcoming event with unknown announcement date retained',()=>assert.equal(validate(response([{...item,type:'conference',link:'https://www.isscc.org/program',source:'ISSCC',date:null,date_type:'unknown',event_date:research.until}])).items.length,1));
+test('Old paper retained without date cutoff',()=>assert.equal(validate(response([{...item,date:'2001-01-01'}])).items.length,1));
+test('Upcoming event with unknown announcement date retained',()=>assert.equal(validate(response([{...item,type:'conference',link:'https://www.isscc.org/program',source:'ISSCC',date:null,date_type:'unknown',event_date:'2099-01-01'}])).items.length,1));
 test('Zero eligible items is a valid evidence artifact',()=>assert.equal(validate(response([])).items.length,0));
 test('Announcement type is excluded with specific diagnostics; valid items survive',()=>{
  const r=validate(response([{...item,type:'announcement'},item]));
@@ -130,15 +129,6 @@ test('Source HTML escaped',()=>{assert(!draft.reviewHtml.includes('<script>alert
 test('Missing template token stops rendering',()=>assert.throws(()=>execute('Render Draft Dashboard',evidence,{'Build Research Prompt':{...research,dashboardTemplate:'bad'}})));
 test('Private resume URL never appears in report',()=>assert(!draft.reviewHtml.includes('resumeFormUrl')));
 test('Source revision and workflow build retained',()=>{assert.equal(draft.sourceRevision,'a'.repeat(40));assert(/^[a-f0-9]{64}$/.test(draft.workflowBuild));});
-test('Review form requires populated slots only',()=>{
- const fields=nodes['Human Evidence Review'].parameters.formFields.values;
- assert.equal(fields.length,11);
- for(const [i,f]of fields.slice(1,9).entries()){
-  assert(!f.defaultValue);
-  const required=new Function('$','return ('+f.requiredField.slice(3,-3)+')')(n=>({first:()=>({json:draft})}));
-  assert.equal(required,i<3);
- }
-});
 test('Missing human decision prevents output',()=>assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read'})));
 const decisions=execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read',E02:'Ignore',E03:'Investigate','Source verification':'Confirmed','Review notes':'TEST FIXTURE'});
 const reviewed=execute('Render Reviewed Dashboard',decisions);
@@ -184,3 +174,26 @@ test('Text-only zero results proceed without claiming search',()=>{
 });
 test('Read requires confirmation of source checks',()=>assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',E01:'Read',E02:'Ignore',E03:'Investigate'}),/independent source verification/));
 console.log('All '+count+' checks passed.');
+
+test('No date windows or result cap in config or prompt',()=>{
+ for(const k of ['lookback_days','upcoming_days','max_items'])assert(!Object.hasOwn(config,k));
+ assert(!research.prompt.includes('{{START_DATE}}'));assert(!research.prompt.includes('{{MAX_ITEMS}}'));
+ assert(research.prompt.includes('without any publication-date cutoff'));
+});
+test('Sorts newest first with unknown dates last and reassigns IDs',()=>{
+ const r=validate(response([{...item,date:'2001-01-01',link:item.link+'1'},{...item,date:null,date_type:'unknown',link:item.link+'2'},item]));
+ assert.deepEqual(r.items.map(x=>x.date),[research.today,'2001-01-01',null]);
+ assert.deepEqual(r.items.map(x=>x.id),['E01','E02','E03']);
+});
+test('More than eight results survive and are all reviewable',()=>{
+ const r=validate(response(Array.from({length:12},(_,i)=>({...item,source:'IEEE Xplore',link:'https://ieeexplore.ieee.org/document/'+(10000000+i)}))));
+ assert.equal(r.items.length,12);
+ const form={Reviewer:'Trainer',Decisions:r.items.map(x=>x.id+'=Investigate').join('\n'),'Source verification':'Needs investigation'};
+ const out=execute('Apply Human Decisions',form,{'Render Draft Dashboard':r});assert.equal(out.items.length,12);
+ assert(out.items.every(x=>x.decision==='Investigate'));
+});
+test('Decision lines reject unknown and duplicate IDs',()=>{
+ assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',Decisions:'E99=Read'}),/Unknown item/);
+ assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',Decisions:'E01=Read\nE01=Ignore'}),/Duplicate decision/);
+});
+console.log('Final total: '+count+' checks passed.');

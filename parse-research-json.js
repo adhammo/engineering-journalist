@@ -13,7 +13,7 @@ const chunks=Array.isArray(grounding.groundingChunks)?grounding.groundingChunks:
 const usableChunks=chunks.filter(chunk=>typeof chunk?.web?.uri==='string'&&/^https?:\/\/\S+$/.test(chunk.web.uri));
 let data;
 try {data=JSON.parse(text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,''));} catch {throw new Error('Malformed research JSON: fail closed. Inspect Gemini response.');}
-if (!Array.isArray(data.items) || !Array.isArray(data.coverage) || data.items.length>run.config.max_items) throw new Error('Invalid evidence schema / item limit.');
+if (!Array.isArray(data.items) || !Array.isArray(data.coverage)) throw new Error('Invalid evidence schema.');
 // Search activity and returned source evidence are different conditions.
 // A search with zero candidates can legitimately have no groundingChunks.
 const unverifiedText=textEnvelope&&!usableChunks.length;
@@ -64,17 +64,17 @@ for (const [i, original] of data.items.entries()) {
   }
  }
  if(reasons.length) {rejected.push({input_index:i+1,title:item.title,reason:reasons.join(' '),original});continue;}
- const recent=item.date && item.date>=run.start && item.date<=run.today;
- const upcoming=['conference','webinar'].includes(item.type) && item.event_date && item.event_date>=run.today && item.event_date<=run.until;
- if(!recent && !upcoming) {rejected.push({title:item.title,reason:'Outside window or date unknown'});continue;}
  const key=item.link.replace(/#.*$/,'').replace(/\?.*$/,'').replace(/\/$/,'');
  if(seen.has(key)) {rejected.push({title:item.title,reason:'Duplicate source URL in this run'});continue;}
  seen.add(key);
  items.push({...item,id:'E'+String(items.length+1).padStart(2,'0'),verification:'Human verification required',flags:[...normalizations,...(!item.author?['Author unknown']:[]),...(!item.evidence?['No supporting excerpt']:[]),...(item.access!=='full_text'?['Full text not checked']:[]),...(validationWarnings.length?['Inconsistent grounding metadata; verify original source independently']:[])]});
 }
+// Sort deterministically by publication/update date; unknown dates last. Assign IDs after sorting.
+items.sort((a,b)=>(b.date||'').localeCompare(a.date||'') || a.link.localeCompare(b.link));
+items.forEach((item,index)=>{item.id='E'+String(index+1).padStart(2,'0');});
 const coverage=run.config.sources.map(s=>{
  const row=data.coverage.find(c=>c.source===s.name);
  return {source:s.name,status:unverifiedText?'not_verified':['searched','inaccessible','not_searched'].includes(row?.status)?row.status:'not_searched',note:typeof row?.note==='string'?row.note:'No source coverage report returned'};
 });
 if(data.items.length && !items.length) validationWarnings.push('All returned candidates were excluded. This is not evidence that no relevant updates exist. Review the rejection reasons and rerun research.');
-return [{json:{owner:run.owner,repo:run.repo,branch:run.branch,api:run.api,prefix:run.prefix,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild,runId:run.runId,config:run.config,today:run.today,start:run.start,until:run.until,items,coverage,rejected,grounding,researchStatus,validationWarnings,createdAt:new Date().toISOString()}}];
+return [{json:{owner:run.owner,repo:run.repo,branch:run.branch,api:run.api,prefix:run.prefix,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild,runId:run.runId,config:run.config,today:run.today,items,coverage,rejected,grounding,researchStatus,validationWarnings,createdAt:new Date().toISOString()}}];

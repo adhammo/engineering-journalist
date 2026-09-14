@@ -35,7 +35,7 @@ The reviewer must independently check original source pages and choose **Source 
 4. Select your existing Gemini credential on **Google Gemini Chat Model**. The requested model must be available to your API account; no substitute is selected automatically.
 5. Select your GitHub credential on the GitHub HTTP Request nodes, with Contents read/write permission for this repository. If using an existing Header Auth credential, change those nodes' authentication to Generic Credential Type / Header Auth.
 6. Edit and push `engineering-journalist.config.json` to set the topic, keywords, exclusions and sources.
-7. Run Manual Trigger. Open the waiting execution's form at Human Evidence Review. Verify the sources, assign decisions and confirm source checks for Read items.
+7. Run Manual Trigger. Open the waiting execution's form at Human Evidence Review. Verify the sources, enter one decision per result ID (for example `E01=Read`, `E02=Ignore`, `E03=Investigate`, each on its own line), and confirm source checks for Read items.
 8. Review the immutable draft at Human Publication Approval, then approve or reject.
 9. Enable Weekly Schedule and publish the workflow after a successful test. It is disabled in the export; its schedule is Monday 09:00 Africa/Cairo.
 
@@ -44,7 +44,7 @@ Dashboard: <https://adhammo.github.io/engineering-journalist/>. Latest draft: <h
 ## Source-controlled files
 
 - `engineering-journalist.json`: generated, importable n8n workflow.
-- `engineering-journalist.config.json`: topic and source scope, seven-day lookback, upcoming 90 days, maximum eight candidates.
+- `engineering-journalist.config.json`: topic and source scope, no date-window restriction and no fixed candidate-count cap.
 - `research_prompt_template.md`: research instructions and JSON contract.
 - `dashboard_template.html`: report layout and styles.
 - Root `.js` files: Code-node implementations; `render-report.js` is the shared deterministic renderer.
@@ -81,3 +81,9 @@ Malformed JSON, empty answer text, invalid dates and incomplete human decisions 
 Duplicates are filtered within each run. Historical runs are retained, but automated cross-week comparison and follow-up research are not implemented. Offline tests do not prove model availability, factual accuracy, API access or Pages deployment.
 
 The 40-minute exercise uses 10 minutes for manual chat and 30 minutes for automation and failures: inspect Git-controlled inputs, run Research, inspect evidence, complete both human gates, then demonstrate invalid JSON, bad links, missing source confirmation and publication rejection.
+
+## Result ordering
+
+Research has no lookback or event-date horizon and no configured result-count cap. All valid results returned for the configured source scope are retained, deduplicated and sorted by publication/update date from newest to oldest; unknown dates are last. Event dates are displayed separately and never substituted for publication dates. The review form accepts any returned item count using one `ID=Decision` line per item. Every item still requires a decision.
+
+“All results” means the relevant results actually obtained, not a guarantee of exhaustive web coverage. The model context/output capacity and available retrieval tools still limit completeness; this Gemini Chat Model configuration still has no attached search tool.
