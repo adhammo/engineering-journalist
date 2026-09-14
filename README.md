@@ -4,7 +4,7 @@ Source-controlled n8n workflow for IC design engineers, prepared for **adhammo/e
 
 ## Model and workflow
 
-The **Research** node is a Basic LLM Chain connected to **Google Gemini Chat Model**, with **`models/gemini-3.5-flash` hardcoded in that node**. The model is not read from the config file. The parser consumes the chain's `text` output. Gemini HTTP research and retry nodes have been removed.
+The **Research** node is an AI Agent connected to **Google Gemini Chat Model** (hardcoded `models/gemini-3.5-flash`) and **SearXNG Search**. The parser reads `output` and retains `intermediateSteps` tool observations as `searchEvidence` in the archived evidence JSON.
 
 ```mermaid
 flowchart TD
@@ -12,6 +12,7 @@ flowchart TD
   B --> C[Fetch config, prompt and HTML template]
   C --> D[Build Research Prompt]
   M[Gemini Chat Model: gemini-3.5-flash] -->|Language model| E[Research]
+  S[SearXNG Search] -->|Tool| E
   D --> E
   E --> F[Parse Research JSON]
   F --> G[Archive evidence snapshot]
@@ -23,7 +24,7 @@ flowchart TD
   K -->|Reject| N[Keep current dashboard]
 ```
 
-**Research capability:** naming a node Research does not give the model a web-search tool. This configuration does not attach a search tool. Text-only results are marked `unverified_model_output`; coverage is marked `not_verified`, regardless of the model's written claims. The prompt asks for no findings when current sources cannot be accessed. Without external evidence or a separately configured retrieval capability, this is a human-reviewed candidate-generation flow, not independently verified live monitoring.
+**Research capability:** SearXNG supplies live search snippets. Candidate URLs must appear in actual tool results. Missing tool traces stop the agent path. Human review must verify authors, dates and claims on the original source pages.
 
 The reviewer must independently check original source pages and choose **Source verification: Confirmed** before any Read item can enter the briefing. Ignore excludes an item; Investigate holds it for manual follow-up. Final approval publishes the exact reviewed bytes. Zero results never prove that no updates exist.
 
@@ -32,7 +33,7 @@ The reviewer must independently check original source pages and choose **Source 
 1. Push this directory to `adhammo/engineering-journalist` on `main`.
 2. Enable GitHub Pages from `main`, `/ (root)`, to view the HTML reports. Alternatively, download and open the HTML locally.
 3. Import `engineering-journalist.json` into n8n.
-4. Select your existing Gemini credential on **Google Gemini Chat Model**. The requested model must be available to your API account; no substitute is selected automatically.
+4. Select your existing Gemini credential on **Google Gemini Chat Model**. The requested model must be available to your API account; no substitute is selected automatically. On **SearXNG Search**, create/select a SearXNG credential with API URL `http://searxng:8080`. The existing Docker service must allow JSON search; no API key is needed for this local service.
 5. Select your GitHub credential on the GitHub HTTP Request nodes, with Contents read/write permission for this repository. If using an existing Header Auth credential, change those nodes' authentication to Generic Credential Type / Header Auth.
 6. Edit and push `engineering-journalist.config.json` to set the topic, keywords, exclusions and sources.
 7. Run Manual Trigger. Open the waiting execution's form at Human Evidence Review. Verify the sources, enter one decision per result ID (for example `E01=Read`, `E02=Ignore`, `E03=Investigate`, each on its own line), and confirm source checks for Read items.
@@ -76,7 +77,7 @@ Keep one run in flight; the latest dashboard follows completed-approval order. P
 
 ## Failure handling and teaching
 
-Malformed JSON, empty answer text, invalid dates and incomplete human decisions stop publication. Invalid enums, out-of-scope records and placeholder paper URLs are excluded with reasons. Missing grounding metadata in chain text output produces visible warnings and mandatory source checking rather than a parser error. Raw API input, when supplied, retains its stricter provider-metadata checks.
+Malformed JSON, missing agent tool traces, invalid dates and incomplete decisions stop publication. Invalid enums, out-of-scope links, placeholders and URLs absent from tool results are excluded with reasons. Legacy text-only inputs remain visibly unverified.
 
 Duplicates are filtered within each run. Historical runs are retained, but automated cross-week comparison and follow-up research are not implemented. Offline tests do not prove model availability, factual accuracy, API access or Pages deployment.
 
@@ -86,4 +87,4 @@ The 40-minute exercise uses 10 minutes for manual chat and 30 minutes for automa
 
 Research has no lookback or event-date horizon and no configured result-count cap. All valid results returned for the configured source scope are retained, deduplicated and sorted by publication/update date from newest to oldest; unknown dates are last. Event dates are displayed separately and never substituted for publication dates. The review form accepts any returned item count using one `ID=Decision` line per item. Every item still requires a decision.
 
-“All results” means the relevant results actually obtained, not a guarantee of exhaustive web coverage. The model context/output capacity and available retrieval tools still limit completeness; this Gemini Chat Model configuration still has no attached search tool.
+All results means relevant results actually obtained. The search tool retains all results on the first page per query. The agent has a 30-iteration execution budget and model context/output limits still apply. Coverage is not exhaustive and must disclose these limits.

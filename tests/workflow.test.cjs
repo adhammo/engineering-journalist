@@ -80,7 +80,7 @@ test('Text envelope cannot override an explicit incomplete finish reason',()=>{
  const c=response().body.candidates[0];
  assert.throws(()=>validate({text:c.content.parts[0].text,groundingMetadata:c.groundingMetadata,finishReason:'MAX_TOKENS'}),/finishReason=MAX_TOKENS/);
 });
-test('Unsupported envelope reports input-format mismatch',()=>assert.throws(()=>validate({output:'different shape'}),/Unsupported research input format/));
+test('Unsupported envelope reports input-format mismatch',()=>assert.throws(()=>validate({unexpected:'different shape'}),/Unsupported research input format/));
 test('Malformed JSON fails closed',()=>{const r=response();r.body.candidates[0].content.parts[0].text='{bad';assert.throws(()=>validate(r));});
 test('Truncated response fails closed',()=>{const r=response();r.body.candidates[0].finishReason='MAX_TOKENS';assert.throws(()=>validate(r));});
 test('Future publication date rejected',()=>assert.throws(()=>validate(response([{...item,date:'2099-01-01'}]))));
@@ -155,8 +155,8 @@ const tmp=path.join(root,'tmp');fs.mkdirSync(tmp,{recursive:true});
 fs.writeFileSync(path.join(tmp,'dashboard-test.html'),reviewed.finalHtml);
 console.log(`${count} offline tests passed. No external API execution.`);
 
-test('Research chain uses hardcoded Gemini 3.5 Flash',()=>{
- assert.equal(nodes['Research'].type,'@n8n/n8n-nodes-langchain.chainLlm');
+test('Research agent uses hardcoded Gemini 3.5 Flash',()=>{
+ assert.equal(nodes['Research'].type,'@n8n/n8n-nodes-langchain.agent');
  assert.equal(nodes['Google Gemini Chat Model'].parameters.modelName,'models/gemini-3.5-flash');
  assert.equal(w.connections['Google Gemini Chat Model'].ai_languageModel[0][0].node,'Research');
  assert(!nodes['Gemini Research']);assert(!nodes['Retry Empty Gemini Response']);
@@ -197,3 +197,13 @@ test('Decision lines reject unknown and duplicate IDs',()=>{
  assert.throws(()=>execute('Apply Human Decisions',{Reviewer:'Trainer',Decisions:'E01=Read\nE01=Ignore'}),/Duplicate decision/);
 });
 console.log('Final total: '+count+' checks passed.');
+
+function agentResponse(items=[item],results=[{title:item.title,link:item.link,snippet:'Retrieved test snippet'}]) {
+ return {output:JSON.stringify({items,coverage:[]}),intermediateSteps:[{action:{tool:'searxng-search',toolInput:'site:arxiv.org chiplet'},observation:results.map(r=>JSON.stringify(r)).join(',')||'No good results found.'}]};
+}
+test('Search tool connected and audit enabled',()=>{assert.equal(w.connections['SearXNG Search'].ai_tool[0][0].node,'Research');assert.equal(nodes.Research.parameters.options.returnIntermediateSteps,true);});
+test('Agent output retains actual search results',()=>{const r=validate(agentResponse());assert.equal(r.items.length,1);assert.equal(r.searchEvidence[0].results[0].link,item.link);assert.equal(r.researchStatus,'search_results_returned');});
+test('Agent without search trace fails closed',()=>assert.throws(()=>validate({output:JSON.stringify({items:[],coverage:[]})}),/no search tool trace/));
+test('Agent fabricated URL is excluded',()=>{const r=validate(agentResponse([{...item,link:'https://arxiv.org/abs/2609.12345'}]));assert.equal(r.items.length,0);assert(r.rejected[0].reason.includes('not returned'));});
+test('Agent empty search is recorded as incomplete',()=>{const r=validate(agentResponse([],[]));assert.equal(r.researchStatus,'search_attempted_no_usable_results');assert.equal(r.searchEvidence.length,1);});
+console.log(`${count} checks passed.`);
