@@ -1,0 +1,93 @@
+{
+  "topic": "Chiplet interconnects and heterogeneous integration",
+  "keywords": [
+    "chiplet",
+    "die-to-die",
+    "UCIe",
+    "heterogeneous integration"
+  ],
+  "exclusions": [
+    "stock prices",
+    "job advertisements",
+    "unsubstantiated product rumors"
+  ],
+  "audience": [
+    "digital",
+    "analog",
+    "RF",
+    "system",
+    "verification"
+  ],
+  "lookback_days": 7,
+  "upcoming_days": 90,
+  "max_items": 8,
+  "gemini_model": "gemini-2.5-flash",
+  "sources": [
+    {
+      "name": "IEEE Xplore",
+      "url": "https://ieeexplore.ieee.org/",
+      "types": [
+        "paper"
+      ],
+      "note": "Publisher metadata or accessible abstract; never imply full-text access."
+    },
+    {
+      "name": "arXiv",
+      "url": "https://arxiv.org/",
+      "types": [
+        "paper"
+      ],
+      "note": "Label preprints; arXiv hosting is not peer review."
+    },
+    {
+      "name": "ACM Digital Library",
+      "url": "https://dl.acm.org/",
+      "types": [
+        "paper"
+      ]
+    },
+    {
+      "name": "ISSCC",
+      "url": "https://www.isscc.org/",
+      "types": [
+        "conference"
+      ]
+    },
+    {
+      "name": "Design Automation Conference",
+      "url": "https://www.dac.com/",
+      "types": [
+        "conference"
+      ]
+    },
+    {
+      "name": "IEEE International Microwave Symposium",
+      "url": "https://ims-ieee.org/",
+      "types": [
+        "conference"
+      ]
+    },
+    {
+      "name": "Symposia on VLSI Technology and Circuits",
+      "url": "https://www.vlsisymposium.org/",
+      "types": [
+        "conference"
+      ]
+    },
+    {
+      "name": "UCIe Consortium",
+      "url": "https://www.uciexpress.org/",
+      "types": [
+        "standard",
+        "webinar"
+      ]
+    },
+    {
+      "name": "IEEE Solid-State Circuits Society",
+      "url": "https://sscs.ieee.org/",
+      "types": [
+        "webinar"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1243 @@
+{
+  "name": "Engineering Journalist — Source-Controlled Gemini Research",
+  "nodes": [
+    {
+      "id": "5c67909f-1517-3392-1425-13ee26982727",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "0ff50488-b4b3-8a01-07bb-10addf42f076",
+      "name": "Weekly Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        180
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "disabled": true,
+      "notes": "Monday 09:00 Africa/Cairo. Enable this trigger and publish the workflow after a successful manual run."
+    },
+    {
+      "id": "62d60529-5762-a2f2-7c9c-a9dc5e7c9e89",
+      "name": "Repository Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Repository coordinates only. Research scope lives in engineering-journalist.config.json.\nconst owner = 'adhammo';\nconst repo = 'engineering-journalist';\nconst branch = 'main';\nconst base = `https://api.github.com/repos/${owner}/${repo}`;\nreturn [{json:{owner,repo,branch,base,api:base+'/contents/',prefix:'runs',\n  workflowBuild:'30dcd3b23d6e9b22686d726e55aa62706593acc47a6c7369f60a25edc4bba75c',\n  runId:new Date().toISOString().replace(/[:.]/g,'-')+'-'+$execution.id}}];\n"
+      },
+      "notes": "Source: repository-settings.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "06acf9a5-a163-9a4e-7c95-2ae075b055f8",
+      "name": "Resolve Source Revision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.base + '/commits/' + encodeURIComponent($json.branch) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "e5a0d9d9-a108-bd4a-f9f6-bf3f28ca8d9d",
+      "name": "Fetch Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + 'engineering-journalist.config.json?ref=' + $('Resolve Source Revision').first().json.body.sha }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "782bacd8-8cb6-a9f1-bd59-596772ff3f45",
+      "name": "Fetch Prompt Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + 'research_prompt_template.md?ref=' + $('Resolve Source Revision').first().json.body.sha }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "89fc3635-a463-917e-5192-7d7a2b5d9634",
+      "name": "Fetch Dashboard Template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + 'dashboard_template.html?ref=' + $('Resolve Source Revision').first().json.body.sha }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "858647cf-b8af-a8f8-47d8-65cb1eb5cbe6",
+      "name": "Build Research Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const setup = $('Repository Settings').first().json;\nconst sourceRevision = $('Resolve Source Revision').first().json.body.sha;\nif (!/^[a-f0-9]{40}$/.test(sourceRevision || '')) throw new Error('GitHub source revision is missing.');\nfunction read(name) {\n  const r=$(name).first().json;\n  if(r.statusCode!==200 || !r.body.content || r.body.encoding!=='base64') throw new Error(`Cannot read ${name}. Push all project files to ${setup.owner}/${setup.repo} first.`);\n  return Buffer.from(r.body.content,'base64').toString('utf8');\n}\nconst config=JSON.parse(read('Fetch Config'));\nconst template=read('Fetch Prompt Template');\nconst dashboardTemplate=read('Fetch Dashboard Template');\nif(typeof config.topic!=='string' || !config.topic.trim()) throw new Error('Config topic required.');\nfor(const key of ['keywords','exclusions','audience','sources']) if(!Array.isArray(config[key])) throw new Error(`Config ${key} must be an array.`);\nfor(const key of ['lookback_days','upcoming_days','max_items']) if(!Number.isInteger(config[key]) || config[key]<1) throw new Error(`Invalid ${key}.`);\nif(config.max_items>8 || config.lookback_days>90 || config.upcoming_days>366) throw new Error('Demo limits: max_items <=8, lookback_days <=90, upcoming_days <=366.');\nif(!/^[a-zA-Z0-9._-]+$/.test(config.gemini_model)) throw new Error('Configure a Google Search-capable Gemini model available to your key.');\nconst types=['paper','conference','standard','webinar'];\nfor(const s of config.sources) {\n  if(typeof s.name!=='string' || !/^https:\\/\\/[^/]+/.test(s.url) || !Array.isArray(s.types) || !s.types.length || s.types.some(t=>!types.includes(t))) throw new Error('Each source needs name, HTTPS URL and valid types.');\n}\nif(!config.sources.length) throw new Error('At least one source required.');\nconst today=new Date().toISOString().slice(0,10);\nconst start=new Date(Date.parse(today)-config.lookback_days*86400000).toISOString().slice(0,10);\nconst until=new Date(Date.parse(today)+config.upcoming_days*86400000).toISOString().slice(0,10);\nconst replacements={CONFIG_JSON:JSON.stringify(config),MAX_ITEMS:String(config.max_items),TODAY:today,START_DATE:start,UPCOMING_UNTIL:until};\nfor(const key of Object.keys(replacements)) if(!template.includes('{{'+key+'}}')) throw new Error(`Prompt template missing ${key}.`);\n// Single pass: never treat placeholder-like text inside config values as instructions to substitute.\nconst prompt=template.replace(/\\{\\{(CONFIG_JSON|MAX_ITEMS|TODAY|START_DATE|UPCOMING_UNTIL)\\}\\}/g,(_,k)=>replacements[k]);\nreturn [{json:{...setup,sourceRevision,config,today,start,until,prompt,dashboardTemplate,\n  body:{contents:[{role:'user',parts:[{text:prompt}]}],tools:[{google_search:{}}],generationConfig:{temperature:0.1,maxOutputTokens:16000}}}}];\n"
+      },
+      "notes": "Source: build-research-prompt.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "3e1d37ba-d130-c115-ec25-c9ecbf7c57f8",
+      "name": "Gemini Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + $json.config.gemini_model + ':generateContent' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}"
+      },
+      "notes": "Select your existing googlePalmApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "e7f7254d-d953-6bd4-810c-ec84b11c1575",
+      "name": "Parse Research JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const run=$('Build Research Prompt').first().json;\nconst response=$json.body;\r\nconst c=response.candidates?.[0];\r\nif (!c || c.finishReason!=='STOP') throw new Error('Gemini returned no complete answer. Inspect block/finish reason; retry or raise output limit.');\r\nconst text=(c.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');\r\nconst grounding=c.groundingMetadata;\r\nif (!grounding?.webSearchQueries?.length || !grounding?.groundingChunks?.length) throw new Error('No search grounding evidence returned. Do not publish a memory-only answer. Try a supported Gemini model.');\r\nlet data;\r\ntry {data=JSON.parse(text.trim().replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/,''));} catch {throw new Error('Malformed research JSON: fail closed. Inspect Gemini response.');}\r\nif (!Array.isArray(data.items) || !Array.isArray(data.coverage) || data.items.length>run.config.max_items) throw new Error('Invalid evidence schema / item limit.');\r\nconst host=u=>{const m=/^https:\\/\\/([^/:?#]+)(?::443)?(?:[/?#]|$)/i.exec(u||''); if(!m) throw new Error('HTTPS source link required');return m[1].toLowerCase().replace(/^www\\./,'');};\r\nconst allowed=run.config.sources.map(s=>host(s.url));\r\nconst validDate=v=>v===null || (typeof v==='string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(v) && !isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0,10)===v);\r\nconst seen=new Set(), rejected=[];\r\nconst items=[];\r\nfor (const [i, item] of data.items.entries()) {\r\n for (const key of ['title','source','link','summary','relevance','type','access','publication_status','date_type']) if(typeof item[key]!=='string' || !item[key].trim()) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['author','evidence','evidence_location']) if(item[key]!==null && typeof item[key]!=='string') throw new Error(`Item ${i+1}: invalid ${key}`);\r\n for (const key of ['date','event_date','deadline']) if(!validDate(item[key])) throw new Error(`Item ${i+1}: invalid ${key}`);\r\n if(!['paper','standard','conference','webinar'].includes(item.type) || !['published','updated','unknown'].includes(item.date_type) || !['full_text','abstract_only','metadata_only'].includes(item.access) || !['preprint','published','draft','approved','announcement','unknown'].includes(item.publication_status)) throw new Error('Invalid item enum.');\r\n if(item.date && item.date>run.today) throw new Error('Future publication date: distinguish event date.');\r\n if((item.date===null)!==(item.date_type==='unknown')) throw new Error('Date/date_type mismatch.');\r\n const h=host(item.link);\r\n if(!allowed.some(a=>h===a || h.endsWith('.'+a))) {rejected.push({title:item.title,reason:'Outside configured source domains'});continue;}\r\n if(!run.config.sources.some(s=>{const a=host(s.url);return (h===a || h.endsWith('.'+a)) && s.types.includes(item.type);})) {rejected.push({title:item.title,reason:'Item type excluded by source configuration'});continue;}\r\n const recent=item.date && item.date>=run.start && item.date<=run.today;\r\n const upcoming=['conference','webinar'].includes(item.type) && item.event_date && item.event_date>=run.today && item.event_date<=run.until;\r\n if(!recent && !upcoming) {rejected.push({title:item.title,reason:'Outside window or date unknown'});continue;}\r\n const key=item.link.replace(/#.*$/,'').replace(/\\?.*$/,'').replace(/\\/$/,'');\r\n if(seen.has(key)) {rejected.push({title:item.title,reason:'Duplicate source URL in this run'});continue;}\r\n seen.add(key);\r\n items.push({...item,id:'E'+String(items.length+1).padStart(2,'0'),verification:'Human verification required',flags:[...(!item.author?['Author unknown']:[]),...(!item.evidence?['No supporting excerpt']:[]),...(item.access!=='full_text'?['Full text not checked']:[])]});\r\n}\r\nconst coverage=run.config.sources.map(s=>{\r\n const row=data.coverage.find(c=>c.source===s.name);\r\n return {source:s.name,status:['searched','inaccessible','not_searched'].includes(row?.status)?row.status:'not_searched',note:typeof row?.note==='string'?row.note:'No source coverage report returned'};\r\n});\r\nreturn [{json:{owner:run.owner,repo:run.repo,branch:run.branch,api:run.api,prefix:run.prefix,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild,runId:run.runId,config:run.config,today:run.today,start:run.start,until:run.until,items,coverage,rejected,grounding,createdAt:new Date().toISOString()}}];\r\n"
+      },
+      "notes": "Source: parse-research-json.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "93e7b9b9-9565-b08e-3568-c9c0ea9a5462",
+      "name": "Render Draft Dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "jsCode": "function render(run, template, final=false) {\r\n const e=v=>String(v??'Unknown').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\r\n const cards=rows=>rows.map(x=>`<article><div class=\"eyebrow\">${e(x.id)} · ${e(x.type)} · ${e(x.publication_status)}</div><h2><a href=\"${e(x.link)}\" target=\"_blank\" rel=\"noopener noreferrer\">${e(x.title)}</a></h2><p class=\"meta\">${e(x.author)} · ${e(x.source)} · ${e(x.date)} (${e(x.date_type)})</p><p>${e(x.summary)}</p><p><b>Relevance · AI judgment:</b> ${e(x.relevance)}</p><blockquote>${e(x.evidence)}<small>${e(x.evidence_location)} · ${e(x.access)}</small></blockquote><p class=\"meta\">Event: ${e(x.event_date)} · Deadline: ${e(x.deadline)}</p><p class=\"flag\">${e(x.flags.join(' · ')||'Check original source before deciding')}</p>${final?`<p><b>${e(x.decision)}</b> · ${e(run.reviewer)}</p>`:''}</article>`).join('');\r\n const reads=run.items.filter(x=>x.decision==='Read'), hold=run.items.filter(x=>x.decision==='Investigate'), ignored=run.items.filter(x=>x.decision==='Ignore');\r\n const content=final?`<h2>Weekly reading list (${reads.length})</h2>${cards(reads)||'<p>No items selected for reading.</p>'}<h2>Investigate (${hold.length})</h2><p>Pending follow-up; these items are excluded from the reading briefing. Resolve in a future run.</p>${cards(hold)}<details><summary>Ignored (${ignored.length})</summary>${cards(ignored)}</details>`:cards(run.items)||'<p>No eligible candidates. Review coverage before concluding that there were no updates.</p>';\r\n const suggestions=run.grounding?.searchEntryPoint?.renderedContent;\r\n // Provider search-suggestion HTML stays isolated in a sandbox with scripts disabled.\r\n const search=suggestions?`<iframe title=\"Google Search suggestions\" sandbox=\"allow-popups allow-popups-to-escape-sandbox\" srcdoc=\"${e(suggestions)}\" style=\"width:100%;height:160px;border:0\"></iframe>`:'';\r\n\r\n const values={\r\n  TITLE:e(run.config.topic),\r\n  HEADER:`<div class=\"eyebrow\">Engineering Journalist · ${final?'Reviewed reading selections':'Evidence awaiting review'}</div><h1>${e(run.config.topic)}</h1><p>${e(run.start)} — ${e(run.today)} · Upcoming events through ${e(run.until)}</p><p>${run.items.length} candidates · ${final?reads.length+' selected':'Human gate required'}</p>`,\r\n  NOTICE:final?'Read means selected for reading, not technical endorsement. Facts were not regenerated after review.':'Open original sources. Verify title, author, date and supporting evidence. Use the private n8n form for Read, Ignore or Investigate. The form link is not published here.',\r\n  BODY:content,\r\n  COVERAGE:run.coverage.map(c=>`<tr><td>${e(c.source)}</td><td>${e(c.status)}</td><td>${e(c.note)}</td></tr>`).join(''),\r\n  FILTERED:`<details><summary>Filtered candidates (${run.rejected.length})</summary><ul>${run.rejected.map(x=>`<li>${e(x.title)}: ${e(x.reason)}</li>`).join('')}</ul></details>`,\r\n  SEARCH:search,\r\n  FOOTER:`Run ${e(run.runId)} · Created ${e(run.createdAt)}${final?' · Reviewed '+e(run.reviewedAt)+' · '+e(run.reviewer):''}<br>Source revision: ${e(run.sourceRevision)}<br>Workflow build: ${e(run.workflowBuild)}${final?'<br>Review notes: '+e(run.reviewNotes):''}`\r\n };\r\n for(const key of Object.keys(values)) if(!template.includes(`__${key}__`)) throw new Error(`Dashboard template missing __${key}__`);\r\n return template.replace(/__(TITLE|HEADER|NOTICE|BODY|COVERAGE|FILTERED|SEARCH|FOOTER)__/g,(_,key)=>values[key]);\r\n}\r\n\nconst run=$json;\nconst template=$('Build Research Prompt').first().json.dashboardTemplate;\nconst reviewHtml=render(run,template);\nconst reviewPath=`runs/${run.runId}/evidence.html`;\nreturn [{json:{...run,reviewHtml,reviewPath,\n  reviewGithubUrl:`https://github.com/${run.owner}/${run.repo}/blob/${encodeURIComponent(run.branch)}/${reviewPath}`,\n  reviewPagesUrl:`https://${run.owner}.github.io/${run.repo}/${reviewPath}`,\n  commit:{message:`Evidence snapshot ${run.runId}`,branch:run.branch,content:Buffer.from(reviewHtml).toString('base64')}}}];\n"
+      },
+      "notes": "Source: render-draft-dashboard.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "3cffaf3e-21e0-5bee-fe7b-e4f7c8b422a9",
+      "name": "Archive Evidence Snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.api + $json.reviewPath }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.commit }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "8eafbf1b-b88c-3ae5-1d00-2dd80222c8f2",
+      "name": "Human Evidence Review",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        400
+      ],
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Engineering Journalist — Read / Ignore / Investigate",
+        "formDescription": "={{ 'Open this evidence snapshot: ' + $('Render Draft Dashboard').first().json.reviewPagesUrl + '\nGitHub file: ' + $('Render Draft Dashboard').first().json.reviewGithubUrl + '\nVerify original sources. Read = include, Ignore = exclude, Investigate = hold. There are ' + $('Render Draft Dashboard').first().json.items.length + ' items. Leave unused ID slots blank. Zero items: submit your name to acknowledge coverage.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Reviewer",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "E01",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 0 }}"
+            },
+            {
+              "fieldLabel": "E02",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 1 }}"
+            },
+            {
+              "fieldLabel": "E03",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 2 }}"
+            },
+            {
+              "fieldLabel": "E04",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 3 }}"
+            },
+            {
+              "fieldLabel": "E05",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 4 }}"
+            },
+            {
+              "fieldLabel": "E06",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 5 }}"
+            },
+            {
+              "fieldLabel": "E07",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 6 }}"
+            },
+            {
+              "fieldLabel": "E08",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Read"
+                  },
+                  {
+                    "option": "Ignore"
+                  },
+                  {
+                    "option": "Investigate"
+                  }
+                ]
+              },
+              "requiredField": "={{ $('Render Draft Dashboard').first().json.items.length > 7 }}"
+            },
+            {
+              "fieldLabel": "Review notes",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "webhookId": "c9286f3e-bcfd-caa5-92de-54419cb25bbd",
+      "notes": "Open the waiting execution resume-form URL in n8n. No decision defaults or approval timeout. Eight slots; only existing items require decisions.",
+      "notesInFlow": true
+    },
+    {
+      "id": "be6eacaa-a0f3-7778-99ef-c30b1a37be07",
+      "name": "Apply Human Decisions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const run=$('Render Draft Dashboard').first().json;\r\nconst form=$json.body ?? $json;\r\nif(typeof form.Reviewer!=='string' || !form.Reviewer.trim()) throw new Error('Reviewer is required.');\r\nconst items=run.items.map(item=>{\r\n const decision=form[item.id];\r\n if(!['Read','Ignore','Investigate'].includes(decision)) throw new Error(`Missing explicit decision for ${item.id}. Nothing published.`);\r\n return {...item,decision};\r\n});\r\nreturn [{json:{...run,items,reviewer:form.Reviewer.trim(),reviewNotes:form['Review notes']||'',reviewedAt:new Date().toISOString()}}];\r\n"
+      },
+      "notes": "Source: apply-human-decisions.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "b7fdefd7-5451-29e2-4070-b4e62ec86353",
+      "name": "Render Reviewed Dashboard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        400
+      ],
+      "parameters": {
+        "jsCode": "function render(run, template, final=false) {\r\n const e=v=>String(v??'Unknown').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\r\n const cards=rows=>rows.map(x=>`<article><div class=\"eyebrow\">${e(x.id)} · ${e(x.type)} · ${e(x.publication_status)}</div><h2><a href=\"${e(x.link)}\" target=\"_blank\" rel=\"noopener noreferrer\">${e(x.title)}</a></h2><p class=\"meta\">${e(x.author)} · ${e(x.source)} · ${e(x.date)} (${e(x.date_type)})</p><p>${e(x.summary)}</p><p><b>Relevance · AI judgment:</b> ${e(x.relevance)}</p><blockquote>${e(x.evidence)}<small>${e(x.evidence_location)} · ${e(x.access)}</small></blockquote><p class=\"meta\">Event: ${e(x.event_date)} · Deadline: ${e(x.deadline)}</p><p class=\"flag\">${e(x.flags.join(' · ')||'Check original source before deciding')}</p>${final?`<p><b>${e(x.decision)}</b> · ${e(run.reviewer)}</p>`:''}</article>`).join('');\r\n const reads=run.items.filter(x=>x.decision==='Read'), hold=run.items.filter(x=>x.decision==='Investigate'), ignored=run.items.filter(x=>x.decision==='Ignore');\r\n const content=final?`<h2>Weekly reading list (${reads.length})</h2>${cards(reads)||'<p>No items selected for reading.</p>'}<h2>Investigate (${hold.length})</h2><p>Pending follow-up; these items are excluded from the reading briefing. Resolve in a future run.</p>${cards(hold)}<details><summary>Ignored (${ignored.length})</summary>${cards(ignored)}</details>`:cards(run.items)||'<p>No eligible candidates. Review coverage before concluding that there were no updates.</p>';\r\n const suggestions=run.grounding?.searchEntryPoint?.renderedContent;\r\n // Provider search-suggestion HTML stays isolated in a sandbox with scripts disabled.\r\n const search=suggestions?`<iframe title=\"Google Search suggestions\" sandbox=\"allow-popups allow-popups-to-escape-sandbox\" srcdoc=\"${e(suggestions)}\" style=\"width:100%;height:160px;border:0\"></iframe>`:'';\r\n\r\n const values={\r\n  TITLE:e(run.config.topic),\r\n  HEADER:`<div class=\"eyebrow\">Engineering Journalist · ${final?'Reviewed reading selections':'Evidence awaiting review'}</div><h1>${e(run.config.topic)}</h1><p>${e(run.start)} — ${e(run.today)} · Upcoming events through ${e(run.until)}</p><p>${run.items.length} candidates · ${final?reads.length+' selected':'Human gate required'}</p>`,\r\n  NOTICE:final?'Read means selected for reading, not technical endorsement. Facts were not regenerated after review.':'Open original sources. Verify title, author, date and supporting evidence. Use the private n8n form for Read, Ignore or Investigate. The form link is not published here.',\r\n  BODY:content,\r\n  COVERAGE:run.coverage.map(c=>`<tr><td>${e(c.source)}</td><td>${e(c.status)}</td><td>${e(c.note)}</td></tr>`).join(''),\r\n  FILTERED:`<details><summary>Filtered candidates (${run.rejected.length})</summary><ul>${run.rejected.map(x=>`<li>${e(x.title)}: ${e(x.reason)}</li>`).join('')}</ul></details>`,\r\n  SEARCH:search,\r\n  FOOTER:`Run ${e(run.runId)} · Created ${e(run.createdAt)}${final?' · Reviewed '+e(run.reviewedAt)+' · '+e(run.reviewer):''}<br>Source revision: ${e(run.sourceRevision)}<br>Workflow build: ${e(run.workflowBuild)}${final?'<br>Review notes: '+e(run.reviewNotes):''}`\r\n };\r\n for(const key of Object.keys(values)) if(!template.includes(`__${key}__`)) throw new Error(`Dashboard template missing __${key}__`);\r\n return template.replace(/__(TITLE|HEADER|NOTICE|BODY|COVERAGE|FILTERED|SEARCH|FOOTER)__/g,(_,key)=>values[key]);\r\n}\r\n\nconst run=$json;\n// Use the template captured before research, never a newer template from the branch.\nconst finalHtml=render(run,$('Build Research Prompt').first().json.dashboardTemplate,true);\nconst {reviewHtml,commit,...audit}=run;\nconst draftPath=`runs/${run.runId}/review.html`;\nconst auditPath=`runs/${run.runId}/evidence.json`;\nreturn [{json:{...run,finalHtml,audit,draftPath,auditPath,\n  draftPagesUrl:`https://${run.owner}.github.io/${run.repo}/${draftPath}`,\n  archiveBody:{message:`Briefing draft ${run.runId}`,branch:run.branch,content:Buffer.from(finalHtml).toString('base64')},\n  auditBody:{message:`Evidence and human decisions ${run.runId}`,branch:run.branch,content:Buffer.from(JSON.stringify(audit,null,2)).toString('base64')}}}];\n"
+      },
+      "notes": "Source: render-reviewed-dashboard.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "0ddc97a8-56b6-ff5d-f3c6-15ca732df938",
+      "name": "Archive Evidence and Decisions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        400
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.api + $json.auditPath }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.auditBody }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "3dbd1a06-9504-6d3b-11da-77481c9bee8c",
+      "name": "Archive Reviewed Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        400
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $('Render Reviewed Dashboard').first().json.api + $('Render Reviewed Dashboard').first().json.draftPath }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Render Reviewed Dashboard').first().json.archiveBody }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "d4f934e3-180c-3f31-8ae3-3ded8c7f9a56",
+      "name": "Get Current Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + 'review.html?ref=' + encodeURIComponent($('Repository Settings').first().json.branch) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "db83872d-d377-b0a4-177e-29b6777442c1",
+      "name": "Prepare Review Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        400
+      ],
+      "parameters": {
+        "jsCode": "// review.html is a convenient latest-draft pointer. Approval refers to the immutable per-run draft.\nif(![200,404].includes($json.statusCode)) throw new Error('Cannot read current review.html. Refusing overwrite.');\nconst run=$('Render Reviewed Dashboard').first().json;\nconst body={...run.archiveBody};\nif($json.statusCode===200) body.sha=$json.body.sha;\nreturn [{json:{url:run.api+'review.html',body}}];\n"
+      },
+      "notes": "Source: prepare-review-commit.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "63760bcc-b7ce-455d-03d2-1b185d508dd5",
+      "name": "Publish for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        400
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "4460f31c-5c91-0919-0731-c7f6187248b4",
+      "name": "Human Publication Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        400
+      ],
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Approve exact weekly briefing for publication",
+        "formDescription": "={{ 'Review the immutable draft: ' + $('Render Reviewed Dashboard').first().json.draftPagesUrl + '\nPinned GitHub file: https://github.com/' + $('Render Reviewed Dashboard').first().json.owner + '/' + $('Render Reviewed Dashboard').first().json.repo + '/blob/' + $('Archive Reviewed Draft').first().json.body.commit.sha + '/' + $('Render Reviewed Dashboard').first().json.draftPath + '\nApprove publishes these exact bytes to index.html. Reject preserves the previous dashboard. The root review.html is a convenience pointer only.' }}",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Approver",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve"
+                  },
+                  {
+                    "option": "Reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Notes",
+              "fieldType": "textarea",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "webhookId": "61d58395-1575-1f0e-d85b-bffc6a6f9544",
+      "notes": "Final approval matches the reference methodology. Review the per-run draft, not the moving root review.html.",
+      "notesInFlow": true
+    },
+    {
+      "id": "a9de5dd8-7161-9d48-2622-014e249ef4db",
+      "name": "Record Publication Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        800
+      ],
+      "parameters": {
+        "jsCode": "const run=$('Render Reviewed Dashboard').first().json;\nconst form=$json.body??$json;\nif(!['Approve','Reject'].includes(form.Decision)) throw new Error('An explicit publication decision is required.');\nif(typeof form.Approver!=='string' || !form.Approver.trim()) throw new Error('Approver name is required.');\nconst saved=$('Archive Reviewed Draft').first().json.body;\nif(!saved?.commit?.sha || !saved?.content?.sha) throw new Error('Draft commit identity missing.');\nconst decision={runId:run.runId,decision:form.Decision,approver:form.Approver.trim(),notes:form.Notes||'',at:new Date().toISOString(),draftPath:run.draftPath,draftCommit:saved.commit.sha,draftBlob:saved.content.sha,sourceRevision:run.sourceRevision,workflowBuild:run.workflowBuild};\nreturn [{json:{...decision,approved:form.Decision==='Approve',api:run.api,branch:run.branch,\n  body:{message:`Publication ${form.Decision.toLowerCase()} ${run.runId}`,branch:run.branch,content:Buffer.from(JSON.stringify(decision,null,2)).toString('base64')}}}];\n"
+      },
+      "notes": "Source: record-publication-decision.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "0757f477-256f-d4a9-8267-db7b0b52e5b3",
+      "name": "Save Publication Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        800
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.api + 'runs/' + $json.runId + '/publication-decision.json' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "8b9a8bc1-3e0d-a17b-a50f-81ef5daffeb0",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Record Publication Decision').first().json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1d79da6d-159e-f13d-c391-71c25e08b3e2",
+      "name": "Rejected — keep current dashboard",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        1040
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "acfb7c85-9f09-6eb4-baca-9da6923235f8",
+      "name": "Fetch Approved Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        800
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + $('Record Publication Decision').first().json.draftPath + '?ref=' + $('Record Publication Decision').first().json.draftCommit }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "d464ee70-8e9d-fd89-0a1e-c68ec78b1d13",
+      "name": "Get Current Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        800
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Repository Settings').first().json.api + 'index.html?ref=' + encodeURIComponent($('Repository Settings').first().json.branch) }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "1efb388f-9f90-dc3c-cbc5-9e780b5ea685",
+      "name": "Prepare Publish Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        800
+      ],
+      "parameters": {
+        "jsCode": "// Publish bytes fetched from the EXACT approved commit, not the moving review.html pointer.\nconst current=$json;\nconst approved=$('Fetch Approved Review').first().json;\nconst decision=$('Record Publication Decision').first().json;\nconst run=$('Render Reviewed Dashboard').first().json;\nif(!decision.approved) throw new Error('Publication was not approved.');\nif(![200,404].includes(current.statusCode)) throw new Error('Cannot read current index.html. Refusing overwrite.');\nif(approved.statusCode!==200 || approved.body.sha!==decision.draftBlob || approved.body.encoding!=='base64') throw new Error('Approved draft identity mismatch.');\nconst content=approved.body.content.replace(/\\s/g,'');\nif(content!==run.archiveBody.content) throw new Error('Approved draft content differs from reviewed bytes.');\nconst body={message:`Publish approved briefing ${run.runId}`,branch:run.branch,content};\nif(current.statusCode===200) body.sha=current.body.sha;\nreturn [{json:{url:run.api+'index.html',body}}];\n"
+      },
+      "notes": "Source: prepare-publish-commit.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "6aa792af-d057-240f-10d5-1ea7eddb6c24",
+      "name": "Publish Approved Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        800
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.url }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": false
+            }
+          }
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}"
+      },
+      "notes": "Select your existing githubApi credential. No secret is stored in this export.",
+      "notesInFlow": false
+    },
+    {
+      "id": "477c9612-2e54-ddf2-5c88-ce595408b81a",
+      "name": "Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        800
+      ],
+      "parameters": {
+        "jsCode": "const run=$('Render Reviewed Dashboard').first().json;\nreturn [{json:{status:'Published approved briefing',runId:run.runId,\n  sourceRevision:run.sourceRevision,publicationCommit:$json.body.commit.sha,\n  dashboard:`https://${run.owner}.github.io/${run.repo}/`,\n  archive:`https://${run.owner}.github.io/${run.repo}/${run.draftPath}`,\n  audit:`https://github.com/${run.owner}/${run.repo}/blob/${encodeURIComponent(run.branch)}/${run.auditPath}`,\n  read:run.items.filter(x=>x.decision==='Read').length,\n  investigate:run.items.filter(x=>x.decision==='Investigate').length,\n  ignore:run.items.filter(x=>x.decision==='Ignore').length}}];\n"
+      },
+      "notes": "Source: publication-result.js. Edit the file, run npm run build, then reimport the JSON.",
+      "notesInFlow": false
+    },
+    {
+      "id": "f0b47e96-c485-c300-cb29-3b5d00297bc2",
+      "name": "Setup and Source Control",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -470
+      ],
+      "parameters": {
+        "content": "## 1 · Version-controlled inputs\nTarget: adhammo/engineering-journalist, main. Push this directory first.\nImport engineering-journalist.json, then select GitHub credentials on GitHub HTTP nodes and Gemini on Gemini Research.\nConfig, research prompt and HTML template are fetched from ONE Git commit per run. Edit those files and push: the next run reads them.\nCode node sources are separate .js files. After code changes, npm run build and reimport. No remote JavaScript evaluation.\nGitHub Pages: main / root. Weekly trigger disabled initially.",
+        "width": 760,
+        "height": 340
+      }
+    },
+    {
+      "id": "15a3e7f1-1231-7727-284d-f869014f4974",
+      "name": "Human Gates and Publication",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -470
+      ],
+      "parameters": {
+        "content": "## 2 · Evidence → triage → exact publication approval\nRead includes; Ignore excludes; Investigate holds for follow-up. Eight review slots support max_items <=8.\nRun-specific evidence, decisions, draft and approval are committed under runs/<run-id>/.\nreview.html is the latest draft; index.html changes only after final approval. The published bytes are fetched by the approved commit SHA and checked against the captured draft.\nResume form links remain in the n8n execution; never publish those links. Reviewer names are audit labels, not authenticated identity.\nKeep one run in flight: latest index.html follows completed-approval order.",
+        "width": 760,
+        "height": 340
+      }
+    },
+    {
+      "id": "37e34167-a0d1-1836-c9f9-173951486a44",
+      "name": "Classroom Failure Exercises",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        -470
+      ],
+      "parameters": {
+        "content": "## 3 · 30 minutes: automate and fail safely\n5 min: inspect config and prompt fetches. 8 min: research and evidence. 7 min: both human gates. 8 min: failures. 2 min: recap.\nPin Gemini output for exercises: malformed JSON, missing grounding, future publication date, duplicate source URL, missing human decision, final Reject, draft-blob mismatch.\nErrors stop before production overwrite. Empty search results require coverage review. Search grounding is not independent claim verification.\nInvestigate is recorded for manual follow-up, not automatically researched. Duplicate filtering is per run; historical runs are retained, not automatically diffed.",
+        "width": 760,
+        "height": 340
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Repository Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repository Settings": {
+      "main": [
+        [
+          {
+            "node": "Resolve Source Revision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Source Revision": {
+      "main": [
+        [
+          {
+            "node": "Fetch Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Config": {
+      "main": [
+        [
+          {
+            "node": "Fetch Prompt Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Prompt Template": {
+      "main": [
+        [
+          {
+            "node": "Fetch Dashboard Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Dashboard Template": {
+      "main": [
+        [
+          {
+            "node": "Build Research Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Research Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Research": {
+      "main": [
+        [
+          {
+            "node": "Parse Research JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Research JSON": {
+      "main": [
+        [
+          {
+            "node": "Render Draft Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Draft Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Archive Evidence Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Evidence Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Human Evidence Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Evidence Review": {
+      "main": [
+        [
+          {
+            "node": "Apply Human Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Human Decisions": {
+      "main": [
+        [
+          {
+            "node": "Render Reviewed Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Reviewed Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Archive Evidence and Decisions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Evidence and Decisions": {
+      "main": [
+        [
+          {
+            "node": "Archive Reviewed Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Reviewed Draft": {
+      "main": [
+        [
+          {
+            "node": "Get Current Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Review": {
+      "main": [
+        [
+          {
+            "node": "Prepare Review Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Review Commit": {
+      "main": [
+        [
+          {
+            "node": "Publish for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish for Review": {
+      "main": [
+        [
+          {
+            "node": "Human Publication Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Publication Approval": {
+      "main": [
+        [
+          {
+            "node": "Record Publication Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Publication Decision": {
+      "main": [
+        [
+          {
+            "node": "Save Publication Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Publication Decision": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Approved Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected — keep current dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Approved Review": {
+      "main": [
+        [
+          {
+            "node": "Get Current Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Index": {
+      "main": [
+        [
+          {
+            "node": "Prepare Publish Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Publish Commit": {
+      "main": [
+        [
+          {
+            "node": "Publish Approved Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish Approved Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Schedule": {
+      "main": [
+        [
+          {
+            "node": "Repository Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Cairo",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}

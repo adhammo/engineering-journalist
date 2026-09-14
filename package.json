@@ -1,0 +1,12 @@
+{
+  "name": "engineering-journalist",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Source-controlled n8n engineering journalist demo with Gemini research and human approval",
+  "scripts": {
+    "build": "node scripts/build-workflow.cjs",
+    "check": "node scripts/build-workflow.cjs --check",
+    "test": "node tests/workflow.test.cjs"
+  },
+  "engines": { "node": ">=18" }
+}
